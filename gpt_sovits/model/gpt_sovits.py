@@ -5,6 +5,7 @@ import os
 import traceback
 import ffmpeg
 import numpy as np
+from typing import Tuple, List
 from transformers import HubertModel, AutoModelForMaskedLM, AutoTokenizer
 from gpt_sovits.model.vits import SynthesizerTrn
 from gpt_sovits.model.vits.mel_processing import spectrogram_torch
@@ -52,7 +53,6 @@ class GPT_SoVITS(nn.Module):
             t2s_model_name,
             text_converter_cfg,
             generate_cfg,
-
     ):
         super(GPT_SoVITS, self).__init__()
         self.generate_cfg = generate_cfg
@@ -155,6 +155,28 @@ class GPT_SoVITS(nn.Module):
         prompt_semantic = codes[0, 0].to(self.device)
         return prompt_semantic
 
+    def audio_postprocess(
+            self,
+            audio: List[torch.Tensor],
+            sr: int,
+            fragment_interval: float = 0.3
+    ) -> Tuple[int, np.ndarray]:
+        zero_wav = torch.zeros(
+            int(self.configs.sampling_rate * fragment_interval),
+        ).to(self.device)
+
+        for i, audio_fragment in enumerate(audio):
+            max_audio = torch.abs(audio_fragment).max()  # 简单防止16bit爆音
+            if max_audio > 1:
+                audio_fragment /= max_audio
+            audio_fragment: torch.Tensor = torch.cat([audio_fragment, zero_wav], dim=0)
+            audio[i] = audio_fragment.cpu().numpy()
+
+        audio = np.concatenate(audio, 0)
+        audio = (audio * 32768).astype(np.int16)
+
+        return sr, audio
+
     @torch.no_grad()
     def generate(
             self,
@@ -163,7 +185,8 @@ class GPT_SoVITS(nn.Module):
             top_k=5,
             top_p=1,
             temperature=1,
-            repetition_penalty=1.35
+            repetition_penalty=1.35,
+            fragment_interval=0.3,
     ):
         text, prompt_text, prompt_audio_path = inputs["text"], inputs["prompt_text"], inputs["prompt_audio"]
         ref_audio_paths = inputs.get("ref_audio", [prompt_audio_path])
@@ -197,3 +220,27 @@ class GPT_SoVITS(nn.Module):
             audio_fragment = (self.vits_model.decode(
                 pred_semantic, phones, ref_audio_specs, speed=speed
             ).detach()[0, 0, :])
+            results.append(audio_fragment)
+        return self.audio_postprocess(
+            results,
+            self.generate_cfg.sampling_rate,
+            fragment_interval
+        )
+
+    @classmethod
+    def build_from_cfg(cls, cfg):
+        hubert_model_name = cfg.hubert_model_name
+        bert_model_name = cfg.bert_model_name
+        vits_model_name = cfg.vits_model_name
+        t2s_model_name = cfg.t2s_model_name
+        text_converter_cfg = cfg.text_converter
+        generate_cfg = cfg.generate_cfg
+
+        return cls(
+            hubert_model_name=hubert_model_name,
+            bert_model_name=bert_model_name,
+            t2s_model_name=t2s_model_name,
+            vits_model_name=vits_model_name,
+            text_converter_cfg=text_converter_cfg,
+            generate_cfg=generate_cfg,
+        )

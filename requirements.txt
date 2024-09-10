@@ -1,0 +1,13 @@
+omegaconf
+jieba_fast
+pypinyin
+opencc
+transformers
+sentencepiece
+onnxruntime
+pytorch_lightning
+einops
+tqdm
+librosa
+scipy
+ffmpeg-python
