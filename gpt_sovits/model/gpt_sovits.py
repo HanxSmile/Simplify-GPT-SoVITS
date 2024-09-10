@@ -194,10 +194,6 @@ class GPT_SoVITS(nn.Module):
                 max_len=max(all_bert_feature.shape[-1], all_phone_ids.shape[-1]),
             )
             pred_semantic = pred_semantic[:, -idx:].unsqueeze(0)
-
-
-
-
-
-
-
+            audio_fragment = (self.vits_model.decode(
+                pred_semantic, phones, ref_audio_specs, speed=speed
+            ).detach()[0, 0, :])
