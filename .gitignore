@@ -155,3 +155,4 @@ debug*/
 *.gz
 
 cache/
+.DS_Store
