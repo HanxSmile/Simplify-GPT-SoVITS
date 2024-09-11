@@ -73,7 +73,7 @@ class GPT_SoVITS(nn.Module):
         return list(self.parameters())[0].device
 
     def _init_text_converter(self, cfg):
-        converter_name = cfg.converter_name
+        converter_name = cfg.converter_cls
         converter_cls = registry.get_converter_class(converter_name)
         return converter_cls.build_from_cfg(cfg)
 

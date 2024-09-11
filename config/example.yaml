@@ -1,0 +1,13 @@
+model_cls: gpt_sovits
+
+hubert_model_name: where_is_your_hubert
+bert_model_name: where_is_your_bert
+t2s_model_name: where_is_your_t2s_model
+vits_model_name: where_is_your_vits_model
+text_converter:
+  converter_cls: chinese_converter
+  g2p_model_dir: where_is_your_g2p_model
+  g2p_tokenizer_dir: where_is_your_g2p_tokenizer
+
+generate_cfg:
+  placeholder: Null
