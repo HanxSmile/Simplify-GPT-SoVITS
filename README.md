@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/LICENSE-MIT-green.svg?style=for-the-badge)](https://github.com/RVC-Boss/GPT-SoVITS/blob/main/LICENSE)
 
 [**English**]((./docs/README.md)) | **中文简体** |
-
+</div>
 ## 1. 简介
 
 本项目对 [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS) 进行精简，允许用户使用python代码进行简单地模型推理、训练

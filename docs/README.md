@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/LICENSE-MIT-green.svg?style=for-the-badge)](https://github.com/RVC-Boss/GPT-SoVITS/blob/main/LICENSE)
 
 **English**]| [中文简体]((../README.md)) |
-
+</div>
 ## 1. Introduction
 
 This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS), allowing users to perform simple model inference and training using Python code.
