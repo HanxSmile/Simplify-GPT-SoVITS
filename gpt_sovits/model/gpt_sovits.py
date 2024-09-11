@@ -87,7 +87,7 @@ class GPT_SoVITS(nn.Module):
         t2s_model = t2s_model.eval()
         return t2s_model
 
-    def _init_vits(self, model_name):
+    def _init_vits_model(self, model_name):
         dict_s2 = torch.load(model_name, map_location=torch.device('cpu'))
         hps = dict_s2["config"]
         assert dict_s2['weight']['enc_p.text_embedding.weight'].shape[0] != 322, "Only support version 2"
@@ -143,8 +143,8 @@ class GPT_SoVITS(nn.Module):
         wav16k, sr = librosa.load(ref_wav_path, sr=16000)
         if wav16k.shape[0] > 160000 or wav16k.shape[0] < 48000:
             raise OSError("参考音频在3~10秒范围外，请更换！")
-        wav16k = torch.from_numpy(wav16k)
-        zero_wav_torch = torch.from_numpy(zero_wav)
+        wav16k = torch.from_numpy(wav16k).float()
+        zero_wav_torch = torch.from_numpy(zero_wav).float()
         wav16k = wav16k.to(self.device)
         zero_wav_torch = zero_wav_torch.to(self.device)
 
@@ -162,7 +162,7 @@ class GPT_SoVITS(nn.Module):
             fragment_interval: float = 0.3
     ) -> Tuple[int, np.ndarray]:
         zero_wav = torch.zeros(
-            int(self.configs.sampling_rate * fragment_interval),
+            int(self.generate_cfg.sampling_rate * fragment_interval),
         ).to(self.device)
 
         for i, audio_fragment in enumerate(audio):
@@ -217,8 +217,9 @@ class GPT_SoVITS(nn.Module):
                 max_len=max(all_bert_feature.shape[-1], all_phone_ids.shape[-1]),
             )
             pred_semantic = pred_semantic[:, -idx:].unsqueeze(0)
+            phones = torch.LongTensor(phones).to(self.device)
             audio_fragment = (self.vits_model.decode(
-                pred_semantic, phones, ref_audio_specs, speed=speed
+                pred_semantic, phones[None], ref_audio_specs, speed=speed
             ).detach()[0, 0, :])
             results.append(audio_fragment)
         return self.audio_postprocess(

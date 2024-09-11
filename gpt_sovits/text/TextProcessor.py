@@ -1,5 +1,8 @@
 import re
 import torch
+from gpt_sovits.text.symbols import symbols
+
+_symbol_to_id_v2 = {s: i for i, s in enumerate(symbols)}
 
 
 class TextProcessor:
@@ -21,7 +24,8 @@ class TextProcessor:
         result = []
         for text in texts:
             norm_text = self.normalize_text(text)
-            phones, word2ph = self.g2p_text(text)
+            phones, word2ph = self.g2p_text(norm_text)
+            phones = self.cleaned_text_to_sequence(phones)
             bert_feature = self.get_bert_feature(norm_text, word2ph, device)
             item = {
                 "phones": phones,
@@ -34,7 +38,8 @@ class TextProcessor:
     def process_single(self, text, device):
         text = "".join(self.segment_text(text))
         norm_text = self.normalize_text(text)
-        phones, word2ph = self.g2p_text(text)
+        phones, word2ph = self.g2p_text(norm_text)
+        phones = self.cleaned_text_to_sequence(phones)
         bert_feature = self.get_bert_feature(norm_text, word2ph, device)
         return norm_text, phones, bert_feature
 
@@ -158,3 +163,16 @@ class TextProcessor:
         pattern = f'([{punctuations}])([{punctuations}])+'
         result = re.sub(pattern, r'\1', text)
         return result
+
+    @staticmethod
+    def cleaned_text_to_sequence(cleaned_text):
+        '''Converts a string of text to a sequence of IDs corresponding to the symbols in the text.
+          Args:
+            text: string to convert to a sequence
+          Returns:
+            List of integers corresponding to the symbols in the text
+        '''
+
+        phones = [_symbol_to_id_v2[symbol] for symbol in cleaned_text]
+
+        return phones
