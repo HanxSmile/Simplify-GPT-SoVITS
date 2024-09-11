@@ -4,7 +4,7 @@
 
 [![License](https://img.shields.io/badge/LICENSE-MIT-green.svg?style=for-the-badge)](https://github.com/RVC-Boss/GPT-SoVITS/blob/main/LICENSE)
 
-[**English**]((./docs/README.md)) | **中文简体** |
+[**English**](./docs/README.md)| **中文简体** |
 
 ## 1. 简介
 
