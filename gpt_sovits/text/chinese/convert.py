@@ -46,8 +46,6 @@ class Converter(BaseConverter):
 
     LANG = "zh"
 
-    PUNCTUATIONS = ["!", "?", "…", ",", "."]  # @是SP停顿
-
     def __init__(
             self,
             *args,
@@ -100,13 +98,6 @@ class Converter(BaseConverter):
         )
 
         return replaced_text
-
-    @staticmethod
-    def replace_consecutive_punctuation(text):
-        punctuations = ''.join(re.escape(p) for p in Converter.PUNCTUATIONS)
-        pattern = f'([{punctuations}])([{punctuations}])+'
-        result = re.sub(pattern, r'\1', text)
-        return result
 
     @staticmethod
     def _get_initials_finals(word):

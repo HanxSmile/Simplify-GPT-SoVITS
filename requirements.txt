@@ -12,3 +12,6 @@ librosa
 scipy
 ffmpeg-python
 soundfile
+g2p_en
+LangSegment
+wordsegment
