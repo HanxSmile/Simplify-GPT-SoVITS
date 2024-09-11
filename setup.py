@@ -1,6 +1,4 @@
 """Setup file."""
-import pip
-from distutils.version import LooseVersion
 from setuptools import setup, find_packages
 
 
@@ -10,29 +8,10 @@ def readme():
     return content
 
 
-links = []
-requires = []
+def fetch_requirements(filename):
+    with open(filename) as f:
+        return [ln.strip() for ln in f.read().split("\n")]
 
-if hasattr(pip, '__version__') and LooseVersion(str(pip.__version__)) >= LooseVersion('10.0.0'):
-    # new versions of pip require a session
-    from pip._internal import req, download
-
-    requirements = req.parse_requirements('requirements.txt', session=download.PipSession())
-elif hasattr(pip, '__version__') and LooseVersion(str(pip.__version__)) >= LooseVersion('7.0'):
-    # new versions of pip require a session
-    requirements = pip.req.parse_requirements('requirements.txt', session=pip.download.PipSession())
-else:
-    # old versions do not
-    requirements = pip.req.parse_requirements('requirements.txt')
-
-for item in requirements:
-    # we want to handle package names and also repo urls
-    if getattr(item, 'url', None):  # older pip has url
-        links.append(str(item.url))
-    if getattr(item, 'link', None):  # newer pip has link
-        links.append(str(item.link))
-    if item.req:
-        requires.append(str(item.req))
 
 version = {}
 with open("gpt_sovits/__version__.py") as version_file:
@@ -56,8 +35,7 @@ setup(
         ]
     },
     include_package_data=True,
-    install_requires=requires,
-    dependency_links=links,
+    install_requires=fetch_requirements("requirements.txt"),
     classifiers=[
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",

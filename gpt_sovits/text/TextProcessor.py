@@ -86,7 +86,7 @@ class TextProcessor:
             repeat_feature = res[i].repeat(word2ph[i], 1)
             phone_level_feature.append(repeat_feature)
         phone_level_feature = torch.cat(phone_level_feature, dim=0)
-        return phone_level_feature.T
+        return phone_level_feature.T.to(device)
 
     @staticmethod
     def cut5(inp):
