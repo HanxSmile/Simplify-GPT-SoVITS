@@ -37,7 +37,7 @@ This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS), a
    ```bash
    git clone https://github.com/HanxSmile/Simplify-GPT-SoVITS.git
    cd Simplify-GPT-SoVITS
-   pip install -r requirements
+   pip install .
    ```
 
 5. Verify installation
