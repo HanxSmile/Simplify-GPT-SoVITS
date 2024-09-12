@@ -1,19 +1,11 @@
-from gpt_sovits.text.chinese import TextNormalizer
-from gpt_sovits.text.chinese.g2pw import G2PWPinyin, correct_pronunciation
-from gpt_sovits.text.chinese.tone_sandhi import ToneSandhi
 from gpt_sovits.text.base_converter import BaseConverter
-import jieba_fast.posseg as psg
-from pypinyin import lazy_pinyin, Style
 import re
-import os
-from typing import List
-from pypinyin.contrib.tone_convert import to_finals_tone3, to_initials
 from gpt_sovits.common.registry import registry
 from builtins import str as unicode
 from g2p_en.expand import normalize_numbers
 import unicodedata
 import LangSegment
-import wordsegment
+from gpt_sovits.text.english.utils import en_G2p
 
 
 @registry.register_converter("english_converter")
@@ -23,7 +15,7 @@ class Converter(BaseConverter):
     def __init__(
             self,
     ):
-        pass
+        self._g2p = en_G2p()
 
     def normalize(self, text):
         # todo: eng text normalize
@@ -55,27 +47,17 @@ class Converter(BaseConverter):
         return text
 
     def g2p(self, text):
-        pattern = r"(?<=[{0}])\s*".format("".join(self.PUNCTUATIONS))
-        sentences = [i for i in re.split(pattern, text) if i.strip() != ""]
-        phones, word2ph = self._g2p(sentences)
-        return phones, word2ph
-
-
+        phone_list = self._g2p(text)
+        phones = [ph if ph != "<unk>" else "UNK" for ph in phone_list if ph not in [" ", "<pad>", "UW", "</s>", "<s>"]]
+        return phones, None
 
     @classmethod
     def build_from_cfg(cls, cfg):
-        g2p_model_dir = cfg.get("g2p_model_dir", "GPT_SoVITS/text/G2PWModel")
-        g2p_tokenizer_dir = cfg.get("g2p_tokenizer_dir", "GPT_SoVITS/pretrained_models/chinese-roberta-wwm-ext-large")
-        converter = cls(
-            g2p_model_dir=g2p_model_dir,
-            g2p_tokenizer_dir=g2p_tokenizer_dir,
-        )
-        return converter
+        return cls()
 
 
 if __name__ == '__main__':
-    converter = Converter(g2p_model_dir="/Users/hanxiao/Downloads/G2PWModel_1.1")
-    text = "啊——但是《原神》是由,米哈\游自主，研发的一款全.新开放世界.冒险游戏"
-    norm_text = converter.normalize(text)
-    print(norm_text)
-    print(converter.g2p(norm_text))
+    converter = Converter()
+    print(converter.g2p("hello"))
+    print(converter.g2p(converter.normalize("e.g. I used openai's AI tool to draw a picture.")))
+    print(converter.g2p(converter.normalize("In this; paper, we propose 1 DSPGAN, a GAN-based universal vocoder.")))

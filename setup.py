@@ -32,6 +32,12 @@ setup(
             "text/chinese/g2pw/polyphonic.pickle",
             "text/chinese/g2pw/polyphonic.rep",
             "text/chinese/g2pw/polyphonic-fix.rep",
+
+            "text/english/assets/cmudict.rep",
+            "text/english/assets/cmudict-fast.rep",
+            "text/english/assets/engdict-hot.rep",
+            "text/english/assets/engdict_cache.pickle",
+            "text/english/assets/namedict_cache.pickle",
         ]
     },
     include_package_data=True,

@@ -26,7 +26,7 @@ class TextProcessor:
             norm_text = self.normalize_text(text)
             phones, word2ph = self.g2p_text(norm_text)
             phones = self.cleaned_text_to_sequence(phones)
-            bert_feature = self.get_bert_feature(norm_text, word2ph, device)
+            bert_feature = self.get_bert_feature(norm_text, phones, word2ph, device)
             item = {
                 "phones": phones,
                 "bert_feature": bert_feature,
@@ -40,7 +40,7 @@ class TextProcessor:
         norm_text = self.normalize_text(text)
         phones, word2ph = self.g2p_text(norm_text)
         phones = self.cleaned_text_to_sequence(phones)
-        bert_feature = self.get_bert_feature(norm_text, word2ph, device)
+        bert_feature = self.get_bert_feature(norm_text, phones, word2ph, device)
         return norm_text, phones, bert_feature
 
     def normalize_text(self, text):
@@ -73,7 +73,10 @@ class TextProcessor:
                 result.append(text_seg)
         return result
 
-    def get_bert_feature(self, text: str, word2ph: list, device) -> torch.Tensor:
+    def get_bert_feature(self, text: str, phones: list, word2ph: list, device) -> torch.Tensor:
+        if word2ph is None:
+            return torch.zeros((1024, len(phones)), dtype=torch.float32, ).to(device)
+
         with torch.no_grad():
             inputs = self.tokenizer(text, return_tensors="pt")
             for i in inputs:
