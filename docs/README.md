@@ -117,7 +117,7 @@ This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS), a
 - [x] **Model Inference:**
   - [x] Chinese
   - [x] English
-  - [ ] Japanese
+  - [x] Japanese
 
 - [ ] **Model Training:**
   - [ ] Fine-tuning AR model

@@ -16,3 +16,4 @@ g2p_en
 LangSegment
 wordsegment
 nltk
+pyopenjtalk

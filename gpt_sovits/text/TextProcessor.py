@@ -75,7 +75,7 @@ class TextProcessor:
 
     def get_bert_feature(self, text: str, phones: list, word2ph: list, device) -> torch.Tensor:
         if word2ph is None:
-            return torch.zeros((1024, len(phones)), dtype=torch.float32, ).to(device)
+            return torch.zeros((1024, len(phones)), dtype=torch.float32).to(device)
 
         with torch.no_grad():
             inputs = self.tokenizer(text, return_tensors="pt")

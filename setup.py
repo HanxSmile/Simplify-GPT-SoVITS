@@ -38,6 +38,10 @@ setup(
             "text/english/assets/engdict-hot.rep",
             "text/english/assets/engdict_cache.pickle",
             "text/english/assets/namedict_cache.pickle",
+
+            "text/japanese/assets/user.dict",
+            "text/japanese/assets/userdict.csv",
+            "text/japanese/assets/userdict.md5",
         ]
     },
     include_package_data=True,
