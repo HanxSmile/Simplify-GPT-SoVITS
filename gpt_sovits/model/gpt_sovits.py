@@ -1,6 +1,7 @@
 import torch.nn as nn
 import torch
 import librosa
+import logging
 import os
 import traceback
 import ffmpeg
@@ -141,14 +142,14 @@ class GPT_SoVITS(nn.Module):
             int(self.generate_cfg.sampling_rate * 0.3),
         )
         wav16k, sr = librosa.load(ref_wav_path, sr=16000)
-        if wav16k.shape[0] > 160000 or wav16k.shape[0] < 48000:
-            raise OSError("参考音频在3~10秒范围外，请更换！")
+        if wav16k.shape[0] > 10 * sr or wav16k.shape[0] < 3 * sr:
+            logging.warning("参考音频在3~10秒范围外，请更换！")
         wav16k = torch.from_numpy(wav16k).float()
         zero_wav_torch = torch.from_numpy(zero_wav).float()
         wav16k = wav16k.to(self.device)
         zero_wav_torch = zero_wav_torch.to(self.device)
 
-        wav16k = torch.cat([wav16k, zero_wav_torch])
+        wav16k = torch.cat([zero_wav_torch, wav16k, zero_wav_torch])
         hubert_feature = self.hubert_model(wav16k.unsqueeze(0))["last_hidden_state"].transpose(1, 2)
         codes = self.vits_model.extract_latent(hubert_feature)
 
