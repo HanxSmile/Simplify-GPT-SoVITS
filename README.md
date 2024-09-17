@@ -73,6 +73,7 @@
    bert_model_name: GPT-SoVITS/chinese-roberta-wwm-ext-large
    t2s_model_name: GPT-SoVITS/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt
    vits_model_name: /mnt/data/hanxiao/models/audio/GPT-SoVITS/gsv-v2final-pretrained/s2G2333k.pth
+   cut_method: cut5
    text_converter:
      converter_cls: chinese_converter
      g2p_model_dir: G2PWModel_1.1

@@ -1,6 +1,7 @@
 import re
 import torch
 from gpt_sovits.text.symbols import symbols
+from gpt_sovits.text.cutter import Cutter
 
 _symbol_to_id_v2 = {s: i for i, s in enumerate(symbols)}
 
@@ -14,10 +15,12 @@ class TextProcessor:
             converter,
             bert_model,
             tokenizer,
+            cut_method,
     ):
         self.bert_model = bert_model
         self.tokenizer = tokenizer
         self.converter = converter
+        self.cutter = Cutter(cut_method)
 
     def process(self, text, device):
         texts = self.segment_text(text)
@@ -58,7 +61,7 @@ class TextProcessor:
         """
         text = text.strip()
         text = self.replace_consecutive_punctuation(text)
-        text_segs = self.cut5(text)
+        text_segs = self.cutter(text)
         text_segs = self.merge_short_text_in_array(text_segs, 5)
         result = []
         for text_seg in text_segs:
@@ -90,31 +93,6 @@ class TextProcessor:
             phone_level_feature.append(repeat_feature)
         phone_level_feature = torch.cat(phone_level_feature, dim=0)
         return phone_level_feature.T.to(device)
-
-    @staticmethod
-    def cut5(inp):
-        inp = inp.strip("\n")
-
-        mergeitems = []
-        items = []
-
-        for i, char in enumerate(inp):
-            if char in TextProcessor.PUNCTUATIONS:
-                if char == '.' and i > 0 and i < len(inp) - 1 and inp[i - 1].isdigit() and inp[i + 1].isdigit():
-                    items.append(char)
-                else:
-                    items.append(char)
-                    mergeitems.append("".join(items))
-                    items = []
-            else:
-                items.append(char)
-
-        if items:
-            mergeitems.append("".join(items))
-
-        opt = [item.strip() for item in mergeitems if not set(item).issubset(TextProcessor.PUNCTUATIONS)]
-        opt = [_ for _ in opt if _]
-        return opt
 
     @staticmethod
     def merge_short_text_in_array(texts: list, threshold: int) -> list:

@@ -52,6 +52,7 @@ class GPT_SoVITS(nn.Module):
             bert_model_name,
             vits_model_name,
             t2s_model_name,
+            cut_method,
             text_converter_cfg,
             generate_cfg,
     ):
@@ -67,6 +68,7 @@ class GPT_SoVITS(nn.Module):
             self.text_converter,
             self.bert_model,
             self.bert_tokenizer,
+            cut_method=cut_method
         )
 
     @property
@@ -235,6 +237,7 @@ class GPT_SoVITS(nn.Module):
         bert_model_name = cfg.bert_model_name
         vits_model_name = cfg.vits_model_name
         t2s_model_name = cfg.t2s_model_name
+        cut_method = cfg.get("cut_method", "cut5")
         text_converter_cfg = cfg.text_converter
         generate_cfg = cfg.generate_cfg
 
@@ -243,6 +246,7 @@ class GPT_SoVITS(nn.Module):
             bert_model_name=bert_model_name,
             t2s_model_name=t2s_model_name,
             vits_model_name=vits_model_name,
+            cut_method=cut_method,
             text_converter_cfg=text_converter_cfg,
             generate_cfg=generate_cfg,
         )
