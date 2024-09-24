@@ -1,3 +1,6 @@
+import logging
+
+
 class Registry:
     mapping = {
         "converter_name_mapping": {},
@@ -8,7 +11,7 @@ class Registry:
     def register_model(cls, name):
         def wrap(model_cls):
             if name in cls.mapping["model_name_mapping"]:
-                raise KeyError(
+                logging.warning(
                     "Name '{}' already registered for {}.".format(
                         name, cls.mapping["model_name_mapping"][name]
                     )
@@ -27,7 +30,7 @@ class Registry:
                 converter_cls, BaseConverter
             ), "All converters must inherit BaseConverter class"
             if name in cls.mapping["converter_name_mapping"]:
-                raise KeyError(
+                logging.warning(
                     "Name '{}' already registered for {}.".format(
                         name, cls.mapping["converter_name_mapping"][name]
                     )
