@@ -17,3 +17,6 @@ LangSegment
 wordsegment
 nltk
 pyopenjtalk
+vector_quantize_pytorch
+loralib
+einops
