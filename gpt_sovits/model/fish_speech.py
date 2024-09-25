@@ -255,3 +255,66 @@ class FishSpeech(nn.Module):
             vqgan_model=vqgan_model,
             text2semantic_model=text2semantic_model,
         )
+
+    def encode_tokens(
+            tokenizer,
+            string,
+            device="cuda",
+            prompt_tokens=None,
+            num_codebooks=4,
+    ):
+        string = clean_text(string)
+        string = f"<|im_start|>user\n{string}<|im_end|><|im_start|>assistant\n"
+
+        new_tokens = tokenizer.encode(
+            string,
+            add_special_tokens=False,
+            max_length=10 ** 6,
+            truncation=False,
+        )
+        tokens = torch.tensor([new_tokens], dtype=torch.int, device=device)
+
+        # Codebooks
+        zeros = (
+                torch.ones((num_codebooks, tokens.size(1)), dtype=torch.int, device=device)
+                * CODEBOOK_PAD_TOKEN_ID
+        )
+        prompt = torch.cat((tokens, zeros), dim=0)  # [1+num_codebooks, seq_len]
+
+        if prompt_tokens is None:
+            return prompt
+
+        # Get prompt tokens
+        if prompt_tokens.ndim == 3:
+            assert (
+                    prompt_tokens.shape[0] == 1
+            ), f"3 dim prompt tokens should have shape (1, num_codebooks, seq_len)"
+            prompt_tokens = prompt_tokens[0]
+
+        assert prompt_tokens.ndim == 2
+        data = prompt_tokens + 1
+
+        if prompt_tokens.shape[0] > num_codebooks:
+            logger.warning(
+                f"Prompt tokens shape {prompt_tokens.shape} is larger than num_codebooks {num_codebooks}, getting first {num_codebooks} codebooks"
+            )
+            data = data[:num_codebooks]
+
+        # Add pad token for each codebook
+        data = torch.cat(
+            (data, torch.zeros((data.size(0), 1), dtype=torch.int, device=device)),
+            dim=1,
+        )  # [num_codebooks, seq_len+1]
+
+        # Since 1.0, we use <|semantic|>
+        s0_token_id = tokenizer.convert_tokens_to_ids("<|semantic|>")
+        end_token_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
+        main_token_ids = (
+                torch.ones((1, data.size(1)), dtype=torch.int, device=device) * s0_token_id
+        )  # [1, seq_len+1]
+        main_token_ids[0, -1] = end_token_id
+
+        data = torch.cat((main_token_ids, data), dim=0)  # [1 + num_codebooks, seq_len+1]
+        prompt = torch.cat((prompt, data), dim=1)  # [1 + num_codebooks, seq_len + seq_len + 1]
+
+        return prompt
