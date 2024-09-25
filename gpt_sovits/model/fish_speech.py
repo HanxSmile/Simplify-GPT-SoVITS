@@ -48,28 +48,12 @@ def load_audio(file, sr):
 class FishSpeech(nn.Module):
     def __init__(
             self,
-            hubert_model_name,
-            bert_model_name,
-            vits_model_name,
-            t2s_model_name,
-            cut_method,
-            text_converter_cfg,
-            generate_cfg,
+            vqgan_model,
+            text2semantic_model,
     ):
         super(FishSpeech, self).__init__()
-        self.generate_cfg = generate_cfg
-        self.hubert_model = HubertModel.from_pretrained(hubert_model_name).eval()
-        self.bert_model = AutoModelForMaskedLM.from_pretrained(bert_model_name).eval()
-        self.bert_tokenizer = AutoTokenizer.from_pretrained(bert_model_name)
-        self.text_converter = self._init_text_converter(text_converter_cfg)
-        self.vits_model = self._init_vits_model(vits_model_name)
-        self.t2s_model = self._init_t2s_model(t2s_model_name)
-        self.text_processor = TextProcessor(
-            self.text_converter,
-            self.bert_model,
-            self.bert_tokenizer,
-            cut_method=cut_method
-        )
+        self.vqgan_model = vqgan_model
+        self.text2semantic_model = text2semantic_model
         self.prompt_registered = False
         self.prompt_buffer = dict()
 
@@ -257,20 +241,17 @@ class FishSpeech(nn.Module):
 
     @classmethod
     def build_from_cfg(cls, cfg):
-        hubert_model_name = cfg.hubert_model_name
-        bert_model_name = cfg.bert_model_name
-        vits_model_name = cfg.vits_model_name
-        t2s_model_name = cfg.t2s_model_name
-        cut_method = cfg.get("cut_method", "cut5")
-        text_converter_cfg = cfg.text_converter
-        generate_cfg = cfg.generate_cfg
+
+        vqgan_cfg = cfg.vqgan
+        text2semantic_cfg = cfg.text2semantic
+
+        vqgan_cls = registry.get_model_class(vqgan_cfg.model_cls)
+        vqgan_model = vqgan_cls.build_from_cfg(vqgan_cfg)
+
+        text2semantic_cls = registry.get_model_class(text2semantic_cfg)
+        text2semantic_model = text2semantic_cls.build_from_cfg(text2semantic_cfg)
 
         return cls(
-            hubert_model_name=hubert_model_name,
-            bert_model_name=bert_model_name,
-            t2s_model_name=t2s_model_name,
-            vits_model_name=vits_model_name,
-            cut_method=cut_method,
-            text_converter_cfg=text_converter_cfg,
-            generate_cfg=generate_cfg,
+            vqgan_model=vqgan_model,
+            text2semantic_model=text2semantic_model,
         )
