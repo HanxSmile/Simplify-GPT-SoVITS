@@ -31,6 +31,9 @@ class BaseTransformerForwardResult:
 
 class BaseTransformer(nn.Module):
     SEMANTIC_TOKEN = "<|semantic|>"
+    IM_START_TOKEN = "<|im_start|>"
+    IM_END_TOKEN = "<|im_end|>"
+    CODEBOOK_PAD_TOKEN_ID = 0
 
     def __init__(
             self, config: BaseModelArgs, tokenizer: AutoTokenizer, init_weights: bool = True
@@ -281,13 +284,12 @@ class BaseTransformer(nn.Module):
             self,
             prompt: torch.Tensor,
             max_new_tokens: int,
-            im_end_id: int = 4,
             **sampling_kwargs,
     ) -> torch.Tensor:
         """
         Takes a conditioning sequence (prompt) as input and continues to generate as many tokens as requested.
         """
-
+        im_end_id = self.tokenizer.convert_tokens_to_ids(self.IM_END_TOKEN)
         # create an empty tensor of the expected final shape and fill in the current tokens
         T = prompt.size(1)
 
@@ -332,6 +334,71 @@ class BaseTransformer(nn.Module):
         seq[:, T + 1:] = x
 
         return seq
+
+    @property
+    def device(self):
+        return list(self.parameters())[0].device
+
+    def encode_tokens(
+            self,
+            string,
+            prompt_tokens=None,
+    ):
+
+        string = f"{self.IM_START_TOKEN}user\n{string}{self.IM_END_TOKEN}{self.IM_START_TOKEN}assistant\n"
+
+        new_tokens = self.tokenizer.encode(
+            string,
+            add_special_tokens=False,
+            max_length=10 ** 6,
+            truncation=False,
+        )
+        tokens = torch.tensor([new_tokens], dtype=torch.int, device=self.device)
+
+        # Codebooks
+        zeros = (
+                torch.ones((self.config.num_codebooks, tokens.size(1)), dtype=torch.int, device=self.device)
+                * self.CODEBOOK_PAD_TOKEN_ID
+        )
+        prompt = torch.cat((tokens, zeros), dim=0)  # [1+num_codebooks, seq_len_1]
+
+        if prompt_tokens is None:
+            return prompt
+
+        # Get prompt tokens
+        if prompt_tokens.ndim == 3:
+            assert (
+                    prompt_tokens.shape[0] == 1
+            ), f"3 dim prompt tokens should have shape (1, num_codebooks, seq_len)"
+            prompt_tokens = prompt_tokens[0]
+
+        assert prompt_tokens.ndim == 2
+        data = prompt_tokens + 1
+
+        if prompt_tokens.shape[0] > self.config.num_codebooks:
+            logging.warning(
+                f"Prompt tokens shape {prompt_tokens.shape} is larger than num_codebooks {self.config.num_codebooks}, getting first {self.config.num_codebooks} codebooks"
+            )
+            data = data[:self.config.num_codebooks]
+
+        # Add pad token for each codebook
+        data = torch.cat(
+            (data, torch.zeros((data.size(0), 1), dtype=torch.int, device=self.device)),
+            dim=1,
+        )  # [num_codebooks, seq_len_2 + 1]
+
+        # Since 1.0, we use <|semantic|>
+        s0_token_id = self.tokenizer.convert_tokens_to_ids(self.SEMANTIC_TOKEN)
+        end_token_id = self.tokenizer.convert_tokens_to_ids(self.IM_END_TOKEN)
+        main_token_ids = (
+                torch.ones((1, data.size(1)), dtype=torch.int, device=self.device) * s0_token_id
+        )  # [1, seq_len_2 + 1]
+        main_token_ids[0, -1] = end_token_id
+
+        data = torch.cat((main_token_ids, data), dim=0)  # [1 + num_codebooks, seq_len_2 + 1]
+        prompt = torch.cat((prompt, data), dim=1)  # [1 + num_codebooks, seq_len_1 + seq_len_2 + 1]
+
+        return prompt
 
     @classmethod
     def build_from_cfg(cls, cfg):

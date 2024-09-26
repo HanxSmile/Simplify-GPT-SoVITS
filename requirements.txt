@@ -20,3 +20,4 @@ pyopenjtalk
 vector_quantize_pytorch
 loralib
 einops
+torchaudio

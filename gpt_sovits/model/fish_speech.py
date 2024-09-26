@@ -1,47 +1,11 @@
 import torch.nn as nn
 import torch
-import librosa
+import torchaudio
 import logging
-import os
-import traceback
-import ffmpeg
 import numpy as np
 from typing import Tuple, List
-from transformers import HubertModel, AutoModelForMaskedLM, AutoTokenizer
-from gpt_sovits.model.vits import SynthesizerTrn
-from gpt_sovits.model.vits.mel_processing import spectrogram_torch
-from gpt_sovits.model.AR import Text2SemanticLightningModule
 from gpt_sovits.text.TextProcessor import TextProcessor
 from gpt_sovits.common.registry import registry
-
-
-def clean_path(path_str: str):
-    if path_str.endswith(('\\', '/')):
-        return clean_path(path_str[0:-1])
-    path_str = path_str.replace('/', os.sep).replace('\\', os.sep)
-    return path_str.strip(" ").strip('\'').strip("\n").strip('"').strip(" ").strip("\u202a")
-
-
-def load_audio(file, sr):
-    try:
-        # https://github.com/openai/whisper/blob/main/whisper/audio.py#L26
-        # This launches a subprocess to decode audio while down-mixing and resampling as necessary.
-        # Requires the ffmpeg CLI and `ffmpeg-python` package to be installed.
-        file = clean_path(file)  # 防止小白拷路径头尾带了空格和"和回车
-        if os.path.exists(file) == False:
-            raise RuntimeError(
-                "You input a wrong audio path that does not exists, please fix it!"
-            )
-        out, _ = (
-            ffmpeg.input(file, threads=0)
-            .output("-", format="f32le", acodec="pcm_f32le", ac=1, ar=sr)
-            .run(cmd=["ffmpeg", "-nostdin"], capture_stdout=True, capture_stderr=True)
-        )
-    except Exception as e:
-        traceback.print_exc()
-        raise RuntimeError("音频加载失败")
-
-    return np.frombuffer(out, np.float32).flatten()
 
 
 @registry.register_model("fish_speech")
@@ -50,10 +14,19 @@ class FishSpeech(nn.Module):
             self,
             vqgan_model,
             text2semantic_model,
+            text_converter_cfg,
+            cut_method
     ):
         super(FishSpeech, self).__init__()
         self.vqgan_model = vqgan_model
         self.text2semantic_model = text2semantic_model
+        self.text_converter = self._init_text_converter(text_converter_cfg)
+        self.text_processor = TextProcessor(
+            self.text_converter,
+            None,
+            None,
+            cut_method=cut_method
+        )
         self.prompt_registered = False
         self.prompt_buffer = dict()
 
@@ -66,97 +39,35 @@ class FishSpeech(nn.Module):
         converter_cls = registry.get_converter_class(converter_name)
         return converter_cls.build_from_cfg(cfg)
 
-    def _init_t2s_model(self, model_name):
-        dict_s1 = torch.load(model_name, map_location=torch.device('cpu'))
-        config = dict_s1["config"]
-        self.generate_cfg.max_sec = config["data"]["max_sec"]
-        self.generate_cfg.hz = 50
-        t2s_model = Text2SemanticLightningModule(config, "****", is_train=False)
-        t2s_model.load_state_dict(dict_s1["weight"])
-        t2s_model = t2s_model.eval()
-        return t2s_model
-
-    def _init_vits_model(self, model_name):
-        dict_s2 = torch.load(model_name, map_location=torch.device('cpu'))
-        hps = dict_s2["config"]
-        assert dict_s2['weight']['enc_p.text_embedding.weight'].shape[0] != 322, "Only support version 2"
-        filter_length = hps["data"]["filter_length"]
-        segment_size = hps["train"]["segment_size"]
-        hop_length = hps["data"]["hop_length"]
-        n_speakers = hps["data"]["n_speakers"]
-
-        self.generate_cfg.filter_length = filter_length
-        self.generate_cfg.segment_size = segment_size
-        self.generate_cfg.sampling_rate = hps["data"]["sampling_rate"]
-        self.generate_cfg.hop_length = hop_length
-        self.generate_cfg.win_length = hps["data"]["win_length"]
-        self.generate_cfg.n_speakers = n_speakers
-        self.generate_cfg.semantic_frame_rate = "25hz"
-
-        kwargs = hps["model"]
-        vits_model = SynthesizerTrn(
-            filter_length // 2 + 1,
-            segment_size // hop_length,
-            n_speakers=n_speakers,
-            **kwargs
-        )
-        if hasattr(vits_model, "enc_q"):
-            del vits_model.enc_q
-        vits_model = vits_model.eval()
-        vits_model.load_state_dict(dict_s2["weight"], strict=False)
-        return vits_model
-
     def register_prompt(self, inputs):
         prompt_text, prompt_audio_path = inputs["prompt_text"], inputs["prompt_audio"]
-        ref_audio_paths = inputs.get("ref_audio", [prompt_audio_path])
-
-        audio_prompt = self._get_prompt_semantic(prompt_audio_path)
-        ref_audio_specs = [self._get_ref_spec(_) for _ in ref_audio_paths]
-        _, prompt_text_phones, prompt_text_bert_features = self.text_processor.process_single(prompt_text, self.device)
-
-        self.prompt_buffer["audio_prompt"] = audio_prompt
-        self.prompt_buffer["prompt_text_phones"] = prompt_text_phones
-        self.prompt_buffer["prompt_text_bert_features"] = prompt_text_bert_features
-        self.prompt_buffer["ref_audio_specs"] = ref_audio_specs
+        prompt_tokens = self._get_prompt_semantic(prompt_audio_path)
+        prompt_text = self.text_converter.normalize(prompt_text)
+        prompt_tokens = self.text2semantic_model.encode_tokens(prompt_text, prompt_tokens)
+        self.prompt_buffer["audio_prompt"] = prompt_tokens
         self.prompt_registered = True
-
-    def _get_ref_spec(self, ref_audio_path):
-        audio = load_audio(ref_audio_path, int(self.generate_cfg.sampling_rate))
-        audio = torch.FloatTensor(audio)
-        maxx = audio.abs().max()
-        if maxx > 1:
-            audio /= min(2, maxx)
-        audio_norm = audio
-        audio_norm = audio_norm.unsqueeze(0)
-        spec = spectrogram_torch(
-            audio_norm,
-            self.generate_cfg.filter_length,
-            self.generate_cfg.sampling_rate,
-            self.generate_cfg.hop_length,
-            self.generate_cfg.win_length,
-            center=False,
-        )
-        return spec.to(self.device)
 
     @torch.no_grad()
     def _get_prompt_semantic(self, ref_wav_path: str):
-        zero_wav = np.zeros(
-            int(self.generate_cfg.sampling_rate * 0.3),
+        audio, sr = torchaudio.load(str(ref_wav_path))
+        if audio.shape[0] > 1:
+            audio = audio.mean(0, keepdim=True)
+        audio = torchaudio.functional.resample(
+            audio, sr, self.vqgan_model.spec_transform.sample_rate
         )
-        wav16k, sr = librosa.load(ref_wav_path, sr=16000)
-        if wav16k.shape[0] > 10 * sr or wav16k.shape[0] < 3 * sr:
-            logging.warning("参考音频在3~10秒范围外，请更换！")
-        wav16k = torch.from_numpy(wav16k).float()
-        zero_wav_torch = torch.from_numpy(zero_wav).float()
-        wav16k = wav16k.to(self.device)
-        zero_wav_torch = zero_wav_torch.to(self.device)
 
-        wav16k = torch.cat([zero_wav_torch, wav16k, zero_wav_torch])
-        hubert_feature = self.hubert_model(wav16k.unsqueeze(0))["last_hidden_state"].transpose(1, 2)
-        codes = self.vits_model.extract_latent(hubert_feature)
+        audios = audio[None].to(self.device)
+        logging.info(
+            f"Loaded audio with {audios.shape[2] / self.vqgan_model.spec_transform.sample_rate:.2f} seconds"
+        )
+        # VQ Encoder
+        audio_lengths = torch.tensor([audios.shape[2]], device=self.device, dtype=torch.long)
+        indices = self.vqgan_model.encode(audios, audio_lengths)[0][0]
 
-        prompt_semantic = codes[0, 0].to(self.device)
-        return prompt_semantic
+        indices = indices.to(self.device).long()
+        logging.info(f"Generated indices of shape {indices.shape}")
+
+        return indices
 
     def audio_postprocess(
             self,
@@ -184,58 +95,50 @@ class FishSpeech(nn.Module):
     def generate(
             self,
             inputs,
-            speed=1,
-            top_k=5,
             top_p=1,
             temperature=1,
             repetition_penalty=1.35,
+            max_new_tokens=0,
             fragment_interval=0.3,
     ):
+        temperature = torch.tensor(temperature, device=self.device, dtype=torch.float)
+        top_p = torch.tensor(top_p, device=self.device, dtype=torch.float)
+        repetition_penalty = torch.tensor(repetition_penalty, device=self.device, dtype=torch.float)
+
         text = inputs["text"]
 
         if not self.prompt_registered:
-            prompt_text, prompt_audio_path = inputs["prompt_text"], inputs["prompt_audio"]
-            ref_audio_paths = inputs.get("ref_audio", [prompt_audio_path])
-            audio_prompt = self._get_prompt_semantic(prompt_audio_path)
-            ref_audio_specs = [self._get_ref_spec(_) for _ in ref_audio_paths]
-            _, prompt_text_phones, prompt_text_bert_features = self.text_processor.process_single(prompt_text,
-                                                                                                  self.device)
-        else:
-            audio_prompt = self.prompt_buffer["audio_prompt"]
-            ref_audio_specs = self.prompt_buffer["ref_audio_specs"]
-            prompt_text_phones = self.prompt_buffer["prompt_text_phones"]
-            prompt_text_bert_features = self.prompt_buffer["prompt_text_bert_features"]
+            self.register_prompt(inputs)
 
-        all_data = self.text_processor.process(text, self.device)
+        audio_prompt = self.prompt_buffer["audio_prompt"]
+        text_lst = self.text_processor.segment_text(text)
         results = []
-        for item in all_data:
-            phones, bert_feature = item["phones"], item["bert_feature"]
-            all_bert_feature = torch.cat([prompt_text_bert_features, bert_feature], dim=1)
-            all_phone_ids = torch.LongTensor(prompt_text_phones + phones).to(self.device)
-            all_phone_lens = torch.tensor(all_phone_ids.shape[-1]).to(self.device)
-
-            pred_semantic, idx = self.t2s_model.model.infer_panel(
-                all_phone_ids[None],
-                all_phone_lens[None],
-                audio_prompt[None],
-                all_bert_feature[None],
-                # prompt_phone_len=ph_offset,
-                top_k=top_k,
-                top_p=top_p,
+        zero_wav = np.zeros(
+            int(self.vqgan_model.spec_transform.sample_rate * 0.3),
+        )
+        zero_wav_torch = torch.from_numpy(zero_wav).float()
+        for sub_text in text_lst:
+            encoded = self.text2semantic_model.encode(sub_text)
+            model_inputs = torch.cat([audio_prompt, encoded], dim=1)
+            y = self.text2semantic_model.generate(
+                model_inputs,
+                max_new_tokens=max_new_tokens,
                 temperature=temperature,
-                early_stop_num=self.generate_cfg.hz * self.generate_cfg.max_sec,
-                repetition_penalty=repetition_penalty,
-                max_len=max(all_bert_feature.shape[-1], all_phone_ids.shape[-1]),
+                top_p=top_p,
+                repetition_penalty=repetition_penalty
             )
-            pred_semantic = pred_semantic[:, -idx:].unsqueeze(0)
-            phones = torch.LongTensor(phones).to(self.device)
-            audio_fragment = (self.vits_model.decode(
-                pred_semantic, phones[None], ref_audio_specs, speed=speed
-            ).detach()[0, 0, :])
-            results.append(audio_fragment)
+            codes = y[1:, model_inputs.size(1):-1].clone()
+            codes = codes - 1
+            assert (codes >= 0).all(), f"Negative code found"
+            code_length = torch.tensor([codes.shape[1]], device=self.device)
+            fake_audio, _ = self.vqgan_model.decode(
+                indices=codes[None], feature_lengths=code_length
+            )[0, 0].float().cpu()
+            results.append(fake_audio)
+
         return self.audio_postprocess(
             results,
-            self.generate_cfg.sampling_rate,
+            self.vqgan_model.spec_transform.sample_rate,
             fragment_interval
         )
 
@@ -251,70 +154,11 @@ class FishSpeech(nn.Module):
         text2semantic_cls = registry.get_model_class(text2semantic_cfg)
         text2semantic_model = text2semantic_cls.build_from_cfg(text2semantic_cfg)
 
+        cut_method = cfg.get("cut_method", "cut5")
+        text_converter_cfg = cfg.text_converter
         return cls(
             vqgan_model=vqgan_model,
             text2semantic_model=text2semantic_model,
+            text_converter_cfg=text_converter_cfg,
+            cut_method=cut_method,
         )
-
-    def encode_tokens(
-            tokenizer,
-            string,
-            device="cuda",
-            prompt_tokens=None,
-            num_codebooks=4,
-    ):
-        string = clean_text(string)
-        string = f"<|im_start|>user\n{string}<|im_end|><|im_start|>assistant\n"
-
-        new_tokens = tokenizer.encode(
-            string,
-            add_special_tokens=False,
-            max_length=10 ** 6,
-            truncation=False,
-        )
-        tokens = torch.tensor([new_tokens], dtype=torch.int, device=device)
-
-        # Codebooks
-        zeros = (
-                torch.ones((num_codebooks, tokens.size(1)), dtype=torch.int, device=device)
-                * CODEBOOK_PAD_TOKEN_ID
-        )
-        prompt = torch.cat((tokens, zeros), dim=0)  # [1+num_codebooks, seq_len]
-
-        if prompt_tokens is None:
-            return prompt
-
-        # Get prompt tokens
-        if prompt_tokens.ndim == 3:
-            assert (
-                    prompt_tokens.shape[0] == 1
-            ), f"3 dim prompt tokens should have shape (1, num_codebooks, seq_len)"
-            prompt_tokens = prompt_tokens[0]
-
-        assert prompt_tokens.ndim == 2
-        data = prompt_tokens + 1
-
-        if prompt_tokens.shape[0] > num_codebooks:
-            logger.warning(
-                f"Prompt tokens shape {prompt_tokens.shape} is larger than num_codebooks {num_codebooks}, getting first {num_codebooks} codebooks"
-            )
-            data = data[:num_codebooks]
-
-        # Add pad token for each codebook
-        data = torch.cat(
-            (data, torch.zeros((data.size(0), 1), dtype=torch.int, device=device)),
-            dim=1,
-        )  # [num_codebooks, seq_len+1]
-
-        # Since 1.0, we use <|semantic|>
-        s0_token_id = tokenizer.convert_tokens_to_ids("<|semantic|>")
-        end_token_id = tokenizer.convert_tokens_to_ids("<|im_end|>")
-        main_token_ids = (
-                torch.ones((1, data.size(1)), dtype=torch.int, device=device) * s0_token_id
-        )  # [1, seq_len+1]
-        main_token_ids[0, -1] = end_token_id
-
-        data = torch.cat((main_token_ids, data), dim=0)  # [1 + num_codebooks, seq_len+1]
-        prompt = torch.cat((prompt, data), dim=1)  # [1 + num_codebooks, seq_len + seq_len + 1]
-
-        return prompt
