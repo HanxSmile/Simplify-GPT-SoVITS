@@ -210,17 +210,12 @@ class GPT_SoVITS(nn.Module):
         text = inputs["text"]
 
         if not self.prompt_registered:
-            prompt_text, prompt_audio_path = inputs["prompt_text"], inputs["prompt_audio"]
-            ref_audio_paths = inputs.get("ref_audio", [prompt_audio_path])
-            audio_prompt = self._get_prompt_semantic(prompt_audio_path)
-            ref_audio_specs = [self._get_ref_spec(_) for _ in ref_audio_paths]
-            _, prompt_text_phones, prompt_text_bert_features = self.text_processor.process_single(prompt_text,
-                                                                                                  self.device)
-        else:
-            audio_prompt = self.prompt_buffer["audio_prompt"]
-            ref_audio_specs = self.prompt_buffer["ref_audio_specs"]
-            prompt_text_phones = self.prompt_buffer["prompt_text_phones"]
-            prompt_text_bert_features = self.prompt_buffer["prompt_text_bert_features"]
+            self.register_prompt(inputs)
+
+        audio_prompt = self.prompt_buffer["audio_prompt"]
+        ref_audio_specs = self.prompt_buffer["ref_audio_specs"]
+        prompt_text_phones = self.prompt_buffer["prompt_text_phones"]
+        prompt_text_bert_features = self.prompt_buffer["prompt_text_bert_features"]
 
         all_data = self.text_processor.process(text, self.device)
         results = []
