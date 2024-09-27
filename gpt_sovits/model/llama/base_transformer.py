@@ -440,7 +440,7 @@ class BaseTransformer(nn.Module):
             logging.info("Randomly initialized model")
             return model
 
-        path = cfg.weight_path
+        path = cfg.ckpt
 
         if "int8" in str(Path(path)):
             logging.info("Using int8 weight-only quantization!")

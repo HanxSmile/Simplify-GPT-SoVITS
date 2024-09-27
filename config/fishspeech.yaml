@@ -1,0 +1,61 @@
+model_cls: fish_speech
+
+vqgan:
+  model_cls: filefly_vqgan
+  ckpt: your_vqgan_ckpt_path
+  spec_transform:
+    sample_rate: 44100
+    n_mels: 160
+    n_fft: 2048
+    hop_length: 512
+    win_length: 2048
+  backbone:
+    input_channels: 160
+    depths: [ 3, 3, 9, 3 ]
+    dims: [ 128, 256, 384, 512 ]
+    drop_path_rate: 0.2
+    kernel_size: 7
+  head:
+    hop_length: 512
+    upsample_rates: [ 8, 8, 2, 2, 2 ]
+    upsample_kernel_sizes: [ 16, 16, 4, 4, 4 ]
+    resblock_kernel_sizes: [ 3, 7, 11 ]
+    resblock_dilation_sizes: [ [ 1, 3, 5 ], [ 1, 3, 5 ], [ 1, 3, 5 ] ]
+    num_mels: 512
+    upsample_initial_channel: 512
+    pre_conv_kernel_size: 13
+    post_conv_kernel_size: 13
+  quantizer:
+    input_dim: 512
+    n_groups: 8
+    n_codebooks: 1
+    levels: [ 8, 5, 5, 5 ]
+    downsample_factor: [ 2, 2 ]
+
+text2semantic:
+  model_cls: dual_ar_transformer
+  tokenizer_name: your_tokenizer_path
+  ckpt: your_ar_model_ckpt_path
+  model:
+    attention_qkv_bias: False
+    codebook_size: 1024
+    dim: 1024
+    dropout: 0.1
+    head_dim: 64
+    initializer_range: 0.02
+    intermediate_size: 4096
+    max_seq_len: 4096
+    n_fast_layer: 4
+    n_head: 16
+    n_layer: 24
+    n_local_heads: 2
+    norm_eps: 1e-6
+    num_codebooks: 8
+    rope_base: 1e6
+    tie_word_embeddings: False
+    use_gradient_checkpointing: True
+    vocab_size: 32000
+
+cut_method: cut5
+text_converter:
+  converter_cls: chinese_fs_converter
