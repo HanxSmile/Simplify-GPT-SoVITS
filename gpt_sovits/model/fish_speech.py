@@ -47,11 +47,12 @@ class FishSpeech(nn.Module):
         self.prompt_buffer["audio_prompt"] = prompt_tokens
         self.prompt_registered = True
 
-        self.text2semantic_model.setup_caches(
-            max_batch_size=1,
-            max_seq_len=self.text2semantic_model.config.max_seq_len,
-            dtype=next(self.text2semantic_model.parameters()).dtype,
-        )
+        with torch.device(self.device):
+            self.text2semantic_model.setup_caches(
+                max_batch_size=1,
+                max_seq_len=self.text2semantic_model.config.max_seq_len,
+                dtype=next(self.text2semantic_model.parameters()).dtype,
+            )
 
     @torch.no_grad()
     def _get_prompt_semantic(self, ref_wav_path: str):
