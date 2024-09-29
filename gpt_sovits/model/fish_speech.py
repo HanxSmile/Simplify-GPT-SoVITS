@@ -113,10 +113,7 @@ class FishSpeech(nn.Module):
         audio_prompt = self.prompt_buffer["audio_prompt"]
         text_lst = self.text_processor.segment_text(text)
         results = []
-        zero_wav = np.zeros(
-            int(self.vqgan_model.spec_transform.sample_rate * 0.3),
-        )
-        zero_wav_torch = torch.from_numpy(zero_wav).float()
+
         for sub_text in text_lst:
             encoded = self.text2semantic_model.encode(sub_text)
             model_inputs = torch.cat([audio_prompt, encoded], dim=1)
