@@ -411,7 +411,7 @@ class BaseTransformer(nn.Module):
             n_head=model_cfg.n_head,
             dim=model_cfg.dim,
             intermediate_size=model_cfg.intermediate_size,
-            n_local_heads=model_cfg.n_local_head,
+            n_local_heads=model_cfg.n_local_heads,
             head_dim=model_cfg.head_dim,
             rope_base=model_cfg.rope_base,
             norm_eps=model_cfg.norm_eps,
