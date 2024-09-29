@@ -117,7 +117,7 @@ class FishSpeech(nn.Module):
         results = []
 
         for sub_text in text_lst:
-            encoded = self.text2semantic_model.encode(sub_text)
+            encoded = self.text2semantic_model.encode_tokens(sub_text)
             model_inputs = torch.cat([audio_prompt, encoded], dim=1)
             y = self.text2semantic_model.generate(
                 model_inputs,
