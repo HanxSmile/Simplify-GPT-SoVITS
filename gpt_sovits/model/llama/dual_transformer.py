@@ -22,7 +22,16 @@ class DualARTransformer(BaseTransformer):
 
         # The equivalent bs is so large that sdpa doesn't work
         self.fast_layers = nn.ModuleList(
-            TransformerBlock(config, use_sdpa=False) for _ in range(config.n_fast_layer)
+            TransformerBlock(
+                dim=config.dim,
+                n_head=config.n_head,
+                n_local_heads=config.n_local_heads,
+                head_dim=config.head_dim,
+                dropout=config.dropout,
+                attention_qkv_bias=config.attention_qkv_bias,
+                intermediate_size=config.intermediate_size,
+                norm_eps=config.norm_eps,
+                use_sdpa=False) for _ in range(config.n_fast_layer)
         )
         self.fast_norm = RMSNorm(config.dim, eps=config.norm_eps)
         self.fast_output = nn.Linear(
