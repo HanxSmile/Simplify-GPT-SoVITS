@@ -18,8 +18,8 @@ class FishSpeech(nn.Module):
             cut_method
     ):
         super(FishSpeech, self).__init__()
-        self.vqgan_model = vqgan_model
-        self.text2semantic_model = text2semantic_model
+        self.vqgan_model = vqgan_model.eval()
+        self.text2semantic_model = text2semantic_model.eval()
         self.text_converter = self._init_text_converter(text_converter_cfg)
         self.text_processor = TextProcessor(
             self.text_converter,
@@ -47,11 +47,11 @@ class FishSpeech(nn.Module):
         self.prompt_buffer["audio_prompt"] = prompt_tokens
         self.prompt_registered = True
 
-        with torch.device(self.device):
-            self.text2semantic_model.setup_caches(
+        with torch.device(next(self.parameters()).device):
+            self.setup_caches(
                 max_batch_size=1,
-                max_seq_len=self.text2semantic_model.config.max_seq_len,
-                dtype=next(self.text2semantic_model.parameters()).dtype,
+                max_seq_len=self.config.max_seq_len,
+                dtype=next(self.parameters()).dtype,
             )
 
     @torch.no_grad()
@@ -83,7 +83,7 @@ class FishSpeech(nn.Module):
             fragment_interval: float = 0.3
     ) -> Tuple[int, np.ndarray]:
         zero_wav = torch.zeros(
-            int(self.generate_cfg.sampling_rate * fragment_interval),
+            int(sr * fragment_interval),
         ).to(self.device)
 
         for i, audio_fragment in enumerate(audio):
@@ -139,8 +139,8 @@ class FishSpeech(nn.Module):
             code_length = torch.tensor([codes.shape[1]], device=self.device)
             fake_audio, _ = self.vqgan_model.decode(
                 indices=codes[None], feature_lengths=code_length
-            )[0, 0].float().cpu()
-            results.append(fake_audio)
+            )
+            results.append(fake_audio[0, 0].float().cpu())
 
         return self.audio_postprocess(
             results,

@@ -289,6 +289,12 @@ class BaseTransformer(nn.Module):
         """
         Takes a conditioning sequence (prompt) as input and continues to generate as many tokens as requested.
         """
+        with torch.device(next(self.parameters()).device):
+            self.setup_caches(
+                max_batch_size=1,
+                max_seq_len=self.config.max_seq_len,
+                dtype=next(self.parameters()).dtype,
+            )
         im_end_id = self.tokenizer.convert_tokens_to_ids(self.IM_END_TOKEN)
         # create an empty tensor of the expected final shape and fill in the current tokens
         T = prompt.size(1)
@@ -434,13 +440,11 @@ class BaseTransformer(nn.Module):
         if lora_config is not None:
             setup_lora(model, lora_config)
             logging.info(f"LoRA setup: {lora_config}")
-        load_weights = cfg.get("load_weights", False)
 
-        if load_weights is False:
+        path = cfg.get("ckpt", None)
+        if path is None:
             logging.info("Randomly initialized model")
             return model
-
-        path = cfg.ckpt
 
         if "int8" in str(Path(path)):
             logging.info("Using int8 weight-only quantization!")

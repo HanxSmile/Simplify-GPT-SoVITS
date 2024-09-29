@@ -1,5 +1,5 @@
 model_cls: fish_speech
-
+cut_method: cut5
 vqgan:
   model_cls: filefly_vqgan
   ckpt: your_vqgan_ckpt_path
@@ -56,6 +56,5 @@ text2semantic:
     use_gradient_checkpointing: True
     vocab_size: 32000
 
-cut_method: cut5
 text_converter:
   converter_cls: chinese_fs_converter

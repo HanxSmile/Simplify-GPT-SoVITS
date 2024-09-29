@@ -68,9 +68,6 @@ class NaiveTransformer(BaseTransformer):
         x = self.forward_generate(x, input_pos)
 
         sampling_kwargs_main = sampling_kwargs.copy()
-        sampling_kwargs_main["temperature"] = 0.1
-        sampling_kwargs_main["top_p"] = 0.1
-        sampling_kwargs_main["repetition_penalty"] = 1.0
 
         codebooks = [
             sample(
