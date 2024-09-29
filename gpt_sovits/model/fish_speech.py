@@ -100,6 +100,8 @@ class FishSpeech(nn.Module):
             repetition_penalty=1.35,
             max_new_tokens=0,
             fragment_interval=0.3,
+            *args,
+            **kwargs
     ):
         temperature = torch.tensor(temperature, device=self.device, dtype=torch.float)
         top_p = torch.tensor(top_p, device=self.device, dtype=torch.float)

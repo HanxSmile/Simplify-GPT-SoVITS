@@ -206,6 +206,8 @@ class GPT_SoVITS(nn.Module):
             temperature=1,
             repetition_penalty=1.35,
             fragment_interval=0.3,
+            *args,
+            **kwargs,
     ):
         text = inputs["text"]
 
