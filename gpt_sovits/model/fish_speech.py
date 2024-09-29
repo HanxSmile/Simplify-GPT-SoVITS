@@ -148,7 +148,7 @@ class FishSpeech(nn.Module):
         vqgan_cls = registry.get_model_class(vqgan_cfg.model_cls)
         vqgan_model = vqgan_cls.build_from_cfg(vqgan_cfg)
 
-        text2semantic_cls = registry.get_model_class(text2semantic_cfg)
+        text2semantic_cls = registry.get_model_class(text2semantic_cfg.model_cls)
         text2semantic_model = text2semantic_cls.build_from_cfg(text2semantic_cfg)
 
         cut_method = cfg.get("cut_method", "cut5")
