@@ -47,13 +47,6 @@ class FishSpeech(nn.Module):
         self.prompt_buffer["audio_prompt"] = prompt_tokens
         self.prompt_registered = True
 
-        with torch.device(next(self.parameters()).device):
-            self.setup_caches(
-                max_batch_size=1,
-                max_seq_len=self.config.max_seq_len,
-                dtype=next(self.parameters()).dtype,
-            )
-
     @torch.no_grad()
     def _get_prompt_semantic(self, ref_wav_path: str):
         audio, sr = torchaudio.load(str(ref_wav_path))
