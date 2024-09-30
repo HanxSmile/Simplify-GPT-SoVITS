@@ -114,6 +114,7 @@ class FishSpeech(nn.Module):
 
         audio_prompt = self.prompt_buffer["audio_prompt"]
         text_lst = self.text_processor.segment_text(text)
+        text_lst = [self.text_processor.normalize_text(_) for _ in text_lst]
         results = []
 
         for sub_text in text_lst:
