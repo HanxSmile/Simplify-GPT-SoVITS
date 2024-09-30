@@ -133,7 +133,7 @@ class FishSpeech(nn.Module):
             fake_audio, _ = self.vqgan_model.decode(
                 indices=codes[None], feature_lengths=code_length
             )
-            results.append(fake_audio[0, 0].float().cpu())
+            results.append(fake_audio[0, 0].float())
 
         return self.audio_postprocess(
             results,
