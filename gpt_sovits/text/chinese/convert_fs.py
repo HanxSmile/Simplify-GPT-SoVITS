@@ -28,6 +28,8 @@ class Converter(BaseConverter):
         "'": '',
         '“': '',
         '”': '',
+        '「': '',
+        '」': '',
     }
 
     LANG = "zh"
