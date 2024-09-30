@@ -24,6 +24,10 @@ class Converter(BaseConverter):
         "—": "-",
         "~": "…",
         "～": "…",
+        '"': '',
+        "'": '',
+        '“': '',
+        '”': '',
     }
 
     LANG = "zh"
@@ -44,6 +48,7 @@ class Converter(BaseConverter):
 
         # 避免重复标点引起的参考泄露
         dest_text = self.replace_consecutive_punctuation(dest_text)
+        dest_text = self.replace_punctuation(dest_text)
         dest_text = Text(dest_text).normalize()
         return dest_text
 
@@ -68,7 +73,7 @@ class Converter(BaseConverter):
 
 if __name__ == '__main__':
     converter = Converter()
-    text = "啊——但是《原神》是由,米哈\游自主，研发的一款全.新开放世界.冒险游戏"
+    text = "啊——但是《原神》是由,米哈\游自主，“研发”的一款全.新开放世界.冒险游戏"
     print(Text(text).normalize())
     norm_text = converter.normalize(text)
     print(norm_text)
