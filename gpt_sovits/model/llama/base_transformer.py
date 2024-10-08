@@ -349,6 +349,7 @@ class BaseTransformer(nn.Module):
             self,
             string,
             prompt_tokens=None,
+            add_end_token=True,
     ):
 
         string = f"{self.IM_START_TOKEN}user\n{string}{self.IM_END_TOKEN}{self.IM_START_TOKEN}assistant\n"
@@ -388,10 +389,11 @@ class BaseTransformer(nn.Module):
             data = data[:self.config.num_codebooks]
 
         # Add pad token for each codebook
-        data = torch.cat(
-            (data, torch.zeros((data.size(0), 1), dtype=torch.int, device=self.device)),
-            dim=1,
-        )  # [num_codebooks, seq_len_2 + 1]
+        if add_end_token:
+            data = torch.cat(
+                (data, torch.zeros((data.size(0), 1), dtype=torch.int, device=self.device)),
+                dim=1,
+            )  # [num_codebooks, seq_len_2 + 1]
 
         # Since 1.0, we use <|semantic|>
         s0_token_id = self.tokenizer.convert_tokens_to_ids(self.SEMANTIC_TOKEN)
@@ -399,7 +401,8 @@ class BaseTransformer(nn.Module):
         main_token_ids = (
                 torch.ones((1, data.size(1)), dtype=torch.int, device=self.device) * s0_token_id
         )  # [1, seq_len_2 + 1]
-        main_token_ids[0, -1] = end_token_id
+        if add_end_token:
+            main_token_ids[0, -1] = end_token_id
 
         data = torch.cat((main_token_ids, data), dim=0)  # [1 + num_codebooks, seq_len_2 + 1]
         prompt = torch.cat((prompt, data), dim=1)  # [1 + num_codebooks, seq_len_1 + seq_len_2 + 1]

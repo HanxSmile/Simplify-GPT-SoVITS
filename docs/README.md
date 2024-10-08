@@ -1,5 +1,5 @@
 <div align="center">
-<h1>Simplified GPT-SoVITS</h1>
+<h1>Simplified Voice-Clone</h1>
 </div>
 
 [![License](https://img.shields.io/badge/LICENSE-MIT-green.svg?style=for-the-badge)](https://github.com/RVC-Boss/GPT-SoVITS/blob/main/LICENSE)

@@ -162,3 +162,70 @@ class FishSpeech(nn.Module):
             text_converter_cfg=text_converter_cfg,
             cut_method=cut_method,
         )
+
+
+@registry.register_model("fish_speech_cat_style")
+class FishSpeechCatStyle(FishSpeech):
+
+    def register_prompt(self, inputs):
+        prompt_text, prompt_audio_path = inputs["prompt_text"], inputs["prompt_audio"]
+        prompt_tokens = self._get_prompt_semantic(prompt_audio_path)
+        prompt_text = self.text_converter.normalize(prompt_text)
+        self.prompt_buffer["audio_prompt"] = prompt_tokens
+        self.prompt_buffer["text_prompt"] = prompt_text
+        self.prompt_registered = True
+
+    @torch.no_grad()
+    def generate(
+            self,
+            inputs,
+            top_p=1,
+            temperature=1,
+            repetition_penalty=1.35,
+            max_new_tokens=0,
+            fragment_interval=0.3,
+            *args,
+            **kwargs
+    ):
+        temperature = torch.tensor(temperature, device=self.device, dtype=torch.float)
+        top_p = torch.tensor(top_p, device=self.device, dtype=torch.float)
+        repetition_penalty = torch.tensor(repetition_penalty, device=self.device, dtype=torch.float)
+
+        text = inputs["text"]
+
+        if not self.prompt_registered:
+            self.register_prompt(inputs)
+
+        audio_prompt = self.prompt_buffer["audio_prompt"]
+        text_prompt = self.prompt_buffer["text_prompt"]
+        text_lst = self.text_processor.segment_text(text)
+        text_lst = [self.text_processor.normalize_text(_) for _ in text_lst]
+        results = []
+
+        for sub_text in text_lst:
+            concat_text = text_prompt + sub_text
+
+            model_inputs = self.text2semantic_model.encode_tokens(
+                concat_text, prompt_tokens=audio_prompt, add_end_token=False)
+
+            y = self.text2semantic_model.generate(
+                model_inputs,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty
+            )
+            codes = y[1:, model_inputs.size(1):-1].clone()
+            codes = codes - 1
+            assert (codes >= 0).all(), f"Negative code found"
+            code_length = torch.tensor([codes.shape[1]], device=self.device)
+            fake_audio, _ = self.vqgan_model.decode(
+                indices=codes[None], feature_lengths=code_length
+            )
+            results.append(fake_audio[0, 0].float())
+
+        return self.audio_postprocess(
+            results,
+            self.vqgan_model.spec_transform.sample_rate,
+            fragment_interval
+        )
