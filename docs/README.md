@@ -96,7 +96,7 @@ This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)、
    import os
    import uuid
    
-   cfg = Factory.read_config("/mnt/data/hanxiao/MyCode/Simiply-GPT-SoVITS/config/gpt_sovits.yaml")
+   cfg = Factory.read_config("config/gpt_sovits.yaml")
    model = Factory.build_model(cfg)
    
    inputs = {
@@ -200,7 +200,7 @@ This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)、
    import os
    import uuid
    
-   cfg = Factory.read_config("/mnt/data/hanxiao/MyCode/Simiply-GPT-SoVITS/config/fishspeech.yaml")
+   cfg = Factory.read_config("config/fishspeech.yaml")
    model = Factory.build_model(cfg)
    
    inputs = {
