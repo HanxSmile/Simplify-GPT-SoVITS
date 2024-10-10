@@ -21,3 +21,4 @@ vector_quantize_pytorch
 loralib
 einops
 torchaudio
+gradio==3.50.2
