@@ -88,4 +88,4 @@ with gr.Blocks() as demo:
         inputs=[model_radio]
     )
 
-demo.queue().launch(server_port=7860)
+demo.queue().launch(server_port=7860, share=True, enable_queue=True, server_name="0.0.0.0", debug=True)
