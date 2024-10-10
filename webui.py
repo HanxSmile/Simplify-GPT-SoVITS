@@ -42,41 +42,40 @@ def generate_audio(model_type, prompt_audio, prompt_text, text):
 
 
 with gr.Blocks() as demo:
-    with gr.Row():
-        model_radio = gr.Radio(
-            choices=model_choices,
-            value=default_model,
-            label="Select Model Type"
-        )
-        init_model_button = gr.Button("Init Model", variant="primary", size="lg")
-    with gr.Row():
-        with gr.Column():
-            with gr.Row():
-                with gr.Column(scale=1, min_width=400):
-                    with gr.Group():
-                        reference_audio = gr.Audio(
-                            label="Reference Audio",
-                            type="filepath",
-                        )
-                        gr.Text(
-                            "Please select a reference audio file and input the corresponding transcription on the right.",
-                            max_lines=1,
-                            container=False,
-                            interactive=False
-                        )
-                with gr.Column(scale=10):
-                    prompt_input_textbox = gr.Textbox(
-                        label="Input Text for Reference Audio"
-                    )
-        with gr.Column():
-            synthetic_input_textbox = gr.Textbox(
-                label="Please Input the Text to be Converted to Audio",
+    with gr.Column():
+        with gr.Group():
+            model_radio = gr.Radio(
+                choices=model_choices,
+                value=default_model,
+                label="Select Model Type"
             )
-        with gr.Column():
-            generate_button = gr.Button("Generate Audio", variant="primary", size="lg")
+            init_model_button = gr.Button("Init Model", variant="primary", size="sm")
 
-        with gr.Column():
-            output_audio = gr.Audio(label="Synthesized Audio")
+    with gr.Column():
+        with gr.Row():
+            with gr.Group():
+                reference_audio = gr.Audio(
+                    label="Reference Audio",
+                    type="filepath",
+                )
+                gr.Text(
+                    "Please select a reference audio file and input the corresponding transcription on the right.",
+                    max_lines=1,
+                    container=False,
+                    interactive=False,
+                )
+            prompt_input_textbox = gr.Textbox(
+                label="Input Text for Reference Audio",
+                lines=10
+            )
+    with gr.Column():
+        synthetic_input_textbox = gr.Textbox(
+            label="Please Input the Text to be Converted to Audio",
+            lines=10,
+        )
+        generate_button = gr.Button("Generate Audio", variant="primary", size="lg")
+
+        output_audio = gr.Audio(label="Synthesized Audio")
 
     generate_button.click(
         fn=generate_audio,
