@@ -1,4 +1,7 @@
 import torchaudio
+import numpy as np
+import random
+import torch
 import uuid
 import os
 from gpt_sovits.utils import save_audio
@@ -16,3 +19,10 @@ def save_audio_temp(prompt_audio):
 
     output_file = save_audio(audio_data, sr, output_file)
     return output_file
+
+
+def set_all_random_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)

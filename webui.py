@@ -3,7 +3,7 @@ import torch
 import os
 import os.path as osp
 from gpt_sovits import Factory
-from webui_utils import model_gen_funcs
+from webui_utils import model_gen_funcs, set_all_random_seed
 
 REPO_PATH = osp.dirname(osp.abspath(__file__))
 CONFIG_PATH = osp.join(REPO_PATH, 'config')
@@ -37,12 +37,13 @@ def init_model(model_type):
     gr.Info(f"Model '{model_type}' Loaded!")
 
 
-def generate_audio(model_type, upload_prompt_audio, recording_prompt_audio, prompt_text, text):
+def generate_audio(model_type, upload_prompt_audio, recording_prompt_audio, prompt_text, text, seed=42):
     global model
     global MODEL_TYPE
     prompt_audio = upload_prompt_audio or recording_prompt_audio
     if prompt_audio is None:
-        gr.Warning(f"Please select a reference audio file or recording your voice and input the corresponding transcription on the right.")
+        gr.Warning(
+            f"Please select a reference audio file or recording your voice and input the corresponding transcription on the right.")
     elif upload_prompt_audio is None:
         gr.Info("You are using Recording Reference Audio!")
     else:
@@ -53,6 +54,7 @@ def generate_audio(model_type, upload_prompt_audio, recording_prompt_audio, prom
     cfg_path = osp.join(CONFIG_PATH, f"{model_type}.yaml")
     cfg = Factory.read_config(cfg_path)
     gr.Warning("Waiting for inference ...")
+    set_all_random_seed(seed)
     result = model_gen_funcs[cfg.model_cls](model, prompt_audio, prompt_text, text)
     gr.Info("Inference Complete!")
     return result
