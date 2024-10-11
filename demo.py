@@ -3,7 +3,7 @@ from gpt_sovits.utils import save_audio
 import os
 import uuid
 
-cfg = Factory.read_config("/mnt/data/hanxiao/MyCode/Simiply-GPT-SoVITS/config/example.yaml")
+cfg = Factory.read_config("config/fishspeech.yaml")
 model = Factory.build_model(cfg)
 
 inputs = {
