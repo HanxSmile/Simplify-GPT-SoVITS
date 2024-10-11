@@ -1,5 +1,5 @@
 model_cls: fish_speech
-cut_method: cut5
+cut_method: cut6
 vqgan:
   model_cls: filefly_vqgan
   ckpt: your_vqgan_ckpt_path

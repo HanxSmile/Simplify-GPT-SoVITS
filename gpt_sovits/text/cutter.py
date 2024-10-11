@@ -151,6 +151,38 @@ class Cutter:
         opt = [_ for _ in opt if _]
         return opt
 
+    @staticmethod
+    def cut6(inp):
+        """
+        按标点符号切
+        :param inp:
+        :return:
+        """
+        inp = inp.strip("\n")
+        punds = {"。", "？", "！", ".", "?", "!", "~", "…"}
+        quotes = {'"', "'", "’", "‘", "”", "“"}
+        mergeitems = []
+        items = []
+
+        for i, char in enumerate(inp):
+            if char in punds:
+                if char == '.' and i > 0 and i < len(inp) - 1 and inp[i - 1].isdigit() and inp[i + 1].isdigit():
+                    items.append(char)
+                else:
+                    items.append(char)
+                    mergeitems.append("".join(items))
+                    items = []
+            else:
+                items.append(char)
+
+        if items:
+            mergeitems.append("".join(items))
+
+        opt = [item.strip("".join(quotes)).strip() for item in mergeitems if
+               not set(item).issubset(punds.union(quotes))]
+        opt = [_.strip() for _ in opt if _.strip()]
+        return opt
+
 
 if __name__ == '__main__':
     text = "你好，我是小明。你好，我是小红。你好，我是小刚。你好，我是小张。"
