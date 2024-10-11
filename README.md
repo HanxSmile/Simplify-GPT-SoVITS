@@ -45,11 +45,10 @@
    python -c "from gpt_sovits import Factory"
    ```
 
-   
 
 ## 3. few-shot 模型推理
 
-### 3.1 GPT-SoVITS
+### .1 GPT-SoVITS
 
 1. 下载预训练模型（可以参考原作者项目 [gpt-sovits](https://github.com/RVC-Boss/GPT-SoVITS)）
 
@@ -74,8 +73,8 @@
    hubert_model_name: GPT-SoVITS/chinese-hubert-base
    bert_model_name: GPT-SoVITS/chinese-roberta-wwm-ext-large
    t2s_model_name: GPT-SoVITS/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt
-   vits_model_name: /mnt/data/hanxiao/models/audio/GPT-SoVITS/gsv-v2final-pretrained/s2G2333k.pth
-   cut_method: cut5
+   vits_model_name: GPT-SoVITS/gsv-v2final-pretrained/s2G2333k.pth
+   cut_method: cut6
    text_converter:
      converter_cls: chinese_converter
      g2p_model_dir: G2PWModel_1.1
@@ -84,6 +83,23 @@
    generate_cfg:
      placeholder: Null
    ```
+
+   > **必须修改的字段**：
+   >
+   > | 字段                               | 解释                                          |
+   > | ---------------------------------- | --------------------------------------------- |
+   > | `hubert_model_name`                | hubert模型的路径                              |
+   > | `bert_model_name`                  | bert模型的路径                                |
+   > | `t2s_model_name`                   | AR模型的路径                                  |
+   > | `vits_model_name`                  | vits模型的路径                                |
+   > | `text_converter.g2p_model_dir`     | g2p模型的路径                                 |
+   > | `text_converter.g2p_tokenizer_dir` | g2p tokenizer 的目录（和bert_model_name一致） |
+   >
+   > **可以修改的字段：**
+   >
+   > | 字段         | 解释                                                    |
+   > | ------------ | ------------------------------------------------------- |
+   > | `cut_method` | 切分长句的方式（建议使用cut6，即按「，。？！...」切分） |
 
 4. 收集参考音频文件与相应的文本内容
 
@@ -128,7 +144,7 @@
 
    ```yaml
    model_cls: fish_speech
-   cut_method: cut5
+   cut_method: cut6
    vqgan:
      model_cls: filefly_vqgan
      ckpt: fish-speech-1.4/firefly-gan-vq-fsq-8x1024-21hz-generator.pth
@@ -189,6 +205,20 @@
      converter_cls: chinese_fs_converter
    ```
 
+   > **必须修改的字段：**
+   >
+   > | 字段                           | 解释                                       |
+   > | ------------------------------ | ------------------------------------------ |
+   > | `vqgan.ckpt`                   | vqgan模型的路径                            |
+   > | `text2semantic.ckpt`           | text2semantic模型的路径                    |
+   > | `text2semantic.tokenizer_name` | text2semantic模型使用的tokenizer的所在目录 |
+   >
+   > **可以修改的字段：**
+   >
+   > | 字段         | 解释                                                    |
+   > | ------------ | ------------------------------------------------------- |
+   > | `cut_method` | 切分长句的方式（建议使用cut6，即按「，。？！...」切分） |
+
 3. 收集参考音频文件与相应的文本内容
 
 4. 模型few-shot推理
@@ -217,6 +247,14 @@
    output_file = save_audio(audio_data, sr, output_file)
    print(output_file)
    ```
+
+## 4. Gradio Demo
+
+**step 1：**下载预训练模型（可参考上文）
+
+**step 2**：准备配置文件，把预训练模型的路径放在配置文件的对应位置（可参考上文），将所有的配置文件放在项目的`config`目录下
+
+**step 3: **在项目目录下运行：`python webui.py`
 
 ## Todo List
 

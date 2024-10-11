@@ -75,7 +75,7 @@ This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)、
    hubert_model_name: GPT-SoVITS/chinese-hubert-base
    bert_model_name: GPT-SoVITS/chinese-roberta-wwm-ext-large
    t2s_model_name: GPT-SoVITS/gsv-v2final-pretrained/s1bert25hz-5kh-longer-epoch=12-step=369668.ckpt
-   vits_model_name: /mnt/data/hanxiao/models/audio/GPT-SoVITS/gsv-v2final-pretrained/s2G2333k.pth
+   vits_model_name: GPT-SoVITS/gsv-v2final-pretrained/s2G2333k.pth
    cut_method: cut5
    text_converter:
      converter_cls: chinese_converter
@@ -85,6 +85,23 @@ This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)、
    generate_cfg:
      placeholder: Null
    ```
+
+   > **Fields that must be modified:**
+   >
+   > | Field                              | Explanation                                                  |
+   > | :--------------------------------- | :----------------------------------------------------------- |
+   > | `hubert_model_name`                | Path to the hubert model                                     |
+   > | `bert_model_name`                  | Path to the bert model                                       |
+   > | `t2s_model_name`                   | Path to the AR model                                         |
+   > | `vits_model_name`                  | Path to the vits model                                       |
+   > | `text_converter.g2p_model_dir`     | Path to the g2p model                                        |
+   > | `text_converter.g2p_tokenizer_dir` | Directory of the g2p tokenizer (consistent with bert_model_name) |
+   >
+   > **Fields that can be modified:**
+   >
+   > | Field        | Explanation                                                  |
+   > | :----------- | :----------------------------------------------------------- |
+   > | `cut_method` | Method for splitting long sentences (It is recommended to use cut6, i.e., split by 「，。？！...」) |
 
 4. Gather reference audio files and corresponding textual content
 
@@ -190,6 +207,20 @@ This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)、
      converter_cls: chinese_fs_converter
    ```
 
+   > **Fields that must be modified:**
+   >
+   > | Field                          | Explanation                                                  |
+   > | :----------------------------- | :----------------------------------------------------------- |
+   > | `vqgan.ckpt`                   | Path to the vqgan model                                      |
+   > | `text2semantic.ckpt`           | Path to the text2semantic model                              |
+   > | `text2semantic.tokenizer_name` | Directory where the tokenizer used by the text2semantic model is located |
+   >
+   > **Optional Fields to Modify:**
+   >
+   > | Field        | Explanation                                                  |
+   > | :----------- | :----------------------------------------------------------- |
+   > | `cut_method` | Method for dividing long sentences (It is suggested to use cut6, which divides by 「，。？！...」) |
+
 3. Gather reference audio files and corresponding textual content
 
 4. Perform few-shot model inference
@@ -218,6 +249,14 @@ This project streamlines [GPT-SoVITS](https://github.com/RVC-Boss/GPT-SoVITS)、
    output_file = save_audio(audio_data, sr, output_file)
    print(output_file)
    ```
+
+## 4. Gradio Demo
+
+**Step 1:** Download the pre-trained model (refer to the above text for details).
+
+**Step 2:** Prepare the configuration file, place the path of the pre-trained model in the corresponding location within the configuration file (refer to the above text for details), and put all configuration files under the project's `config` directory.
+
+**Step 3:** Run in the project directory: `python webui.py`
 
 ## Todo List
 
