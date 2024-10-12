@@ -14,7 +14,6 @@
 import torch
 import numpy as np
 import threading
-import time
 from torch.nn import functional as F
 from contextlib import nullcontext
 import uuid
@@ -75,16 +74,6 @@ class CosyVoiceModel:
         flow_encoder = torch.jit.load(flow_encoder_model, map_location=self.device)
         self.flow.encoder = flow_encoder
 
-    def load_onnx(self, flow_decoder_estimator_model):
-        import onnxruntime
-        option = onnxruntime.SessionOptions()
-        option.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
-        option.intra_op_num_threads = 1
-        providers = ['CUDAExecutionProvider' if torch.cuda.is_available() else 'CPUExecutionProvider']
-        del self.flow.decoder.estimator
-        self.flow.decoder.estimator = onnxruntime.InferenceSession(flow_decoder_estimator_model, sess_options=option,
-                                                                   providers=providers)
-
     def llm_job(self, text, prompt_text, llm_prompt_speech_token, llm_embedding, uuid):
         with self.llm_context:
             for i in self.llm.inference(
@@ -144,7 +133,7 @@ class CosyVoiceModel:
             prompt_text=torch.zeros(1, 0, dtype=torch.int32),
             llm_prompt_speech_token=torch.zeros(1, 0, dtype=torch.int32),
             flow_prompt_speech_token=torch.zeros(1, 0, dtype=torch.int32),
-            prompt_speech_feat=torch.zeros(1, 0, 80), stream=False, speed=1.0, **kwargs):
+            prompt_speech_feat=torch.zeros(1, 0, 80), speed=1.0, **kwargs):
         # this_uuid is used to track variables related to this inference thread
         this_uuid = str(uuid.uuid1())
         with self.lock:
@@ -153,60 +142,24 @@ class CosyVoiceModel:
         p = threading.Thread(target=self.llm_job,
                              args=(text, prompt_text, llm_prompt_speech_token, llm_embedding, this_uuid))
         p.start()
-        if stream is True:
-            token_hop_len = self.token_min_hop_len
-            while True:
-                time.sleep(0.1)
-                if len(self.tts_speech_token_dict[this_uuid]) >= token_hop_len + self.token_overlap_len:
-                    this_tts_speech_token = torch.tensor(
-                        self.tts_speech_token_dict[this_uuid][:token_hop_len + self.token_overlap_len]) \
-                        .unsqueeze(dim=0)
-                    this_tts_speech = self.token2wav(
-                        token=this_tts_speech_token,
-                        prompt_token=flow_prompt_speech_token,
-                        prompt_feat=prompt_speech_feat,
-                        embedding=flow_embedding,
-                        uuid=this_uuid,
-                        finalize=False)
-                    yield {'tts_speech': this_tts_speech.cpu()}
-                    with self.lock:
-                        self.tts_speech_token_dict[this_uuid] = self.tts_speech_token_dict[this_uuid][token_hop_len:]
-                    # increase token_hop_len for better speech quality
-                    token_hop_len = min(self.token_max_hop_len, int(token_hop_len * self.stream_scale_factor))
-                if self.llm_end_dict[this_uuid] is True and len(
-                        self.tts_speech_token_dict[this_uuid]) < token_hop_len + self.token_overlap_len:
-                    break
-            p.join()
-            # deal with remain tokens, make sure inference remain token len equals token_hop_len when cache_speech is not None
-            this_tts_speech_token = torch.tensor(self.tts_speech_token_dict[this_uuid]).unsqueeze(dim=0)
-            this_tts_speech = self.token2wav(
-                token=this_tts_speech_token,
-                prompt_token=flow_prompt_speech_token,
-                prompt_feat=prompt_speech_feat,
-                embedding=flow_embedding,
-                uuid=this_uuid,
-                finalize=True)
-            yield {'tts_speech': this_tts_speech.cpu()}
-        else:
-            # deal with all tokens
-            p.join()
-            this_tts_speech_token = torch.tensor(self.tts_speech_token_dict[this_uuid]).unsqueeze(dim=0)
-            this_tts_speech = self.token2wav(
-                token=this_tts_speech_token,
-                prompt_token=flow_prompt_speech_token,
-                prompt_feat=prompt_speech_feat,
-                embedding=flow_embedding,
-                uuid=this_uuid,
-                finalize=True,
-                speed=speed)
-            yield {'tts_speech': this_tts_speech.cpu()}
+        p.join()
+        this_tts_speech_token = torch.tensor(self.tts_speech_token_dict[this_uuid]).unsqueeze(dim=0)
+        this_tts_speech = self.token2wav(
+            token=this_tts_speech_token,
+            prompt_token=flow_prompt_speech_token,
+            prompt_feat=prompt_speech_feat,
+            embedding=flow_embedding,
+            uuid=this_uuid,
+            finalize=True,
+            speed=speed)
+        yield {'tts_speech': this_tts_speech.cpu()}
         with self.lock:
             self.tts_speech_token_dict.pop(this_uuid)
             self.llm_end_dict.pop(this_uuid)
             self.mel_overlap_dict.pop(this_uuid)
             self.hift_cache_dict.pop(this_uuid)
 
-    def vc(self, source_speech_token, flow_prompt_speech_token, prompt_speech_feat, flow_embedding, stream=False,
+    def vc(self, source_speech_token, flow_prompt_speech_token, prompt_speech_feat, flow_embedding,
            speed=1.0, **kwargs):
         # this_uuid is used to track variables related to this inference thread
         this_uuid = str(uuid.uuid1())
@@ -214,50 +167,17 @@ class CosyVoiceModel:
             self.tts_speech_token_dict[this_uuid], self.llm_end_dict[
                 this_uuid] = source_speech_token.flatten().tolist(), True
             self.mel_overlap_dict[this_uuid], self.hift_cache_dict[this_uuid] = None, None
-        if stream is True:
-            token_hop_len = self.token_min_hop_len
-            while True:
-                if len(self.tts_speech_token_dict[this_uuid]) >= token_hop_len + self.token_overlap_len:
-                    this_tts_speech_token = torch.tensor(
-                        self.tts_speech_token_dict[this_uuid][:token_hop_len + self.token_overlap_len]) \
-                        .unsqueeze(dim=0)
-                    this_tts_speech = self.token2wav(
-                        token=this_tts_speech_token,
-                        prompt_token=flow_prompt_speech_token,
-                        prompt_feat=prompt_speech_feat,
-                        embedding=flow_embedding,
-                        uuid=this_uuid,
-                        finalize=False)
-                    yield {'tts_speech': this_tts_speech.cpu()}
-                    with self.lock:
-                        self.tts_speech_token_dict[this_uuid] = self.tts_speech_token_dict[this_uuid][token_hop_len:]
-                    # increase token_hop_len for better speech quality
-                    token_hop_len = min(self.token_max_hop_len, int(token_hop_len * self.stream_scale_factor))
-                if self.llm_end_dict[this_uuid] is True and len(
-                        self.tts_speech_token_dict[this_uuid]) < token_hop_len + self.token_overlap_len:
-                    break
-            # deal with remain tokens, make sure inference remain token len equals token_hop_len when cache_speech is not None
-            this_tts_speech_token = torch.tensor(self.tts_speech_token_dict[this_uuid], dim=1).unsqueeze(dim=0)
-            this_tts_speech = self.token2wav(
-                token=this_tts_speech_token,
-                prompt_token=flow_prompt_speech_token,
-                prompt_feat=prompt_speech_feat,
-                embedding=flow_embedding,
-                uuid=this_uuid,
-                finalize=True)
-            yield {'tts_speech': this_tts_speech.cpu()}
-        else:
-            # deal with all tokens
-            this_tts_speech_token = torch.tensor(self.tts_speech_token_dict[this_uuid]).unsqueeze(dim=0)
-            this_tts_speech = self.token2wav(
-                token=this_tts_speech_token,
-                prompt_token=flow_prompt_speech_token,
-                prompt_feat=prompt_speech_feat,
-                embedding=flow_embedding,
-                uuid=this_uuid,
-                finalize=True,
-                speed=speed)
-            yield {'tts_speech': this_tts_speech.cpu()}
+
+        this_tts_speech_token = torch.tensor(self.tts_speech_token_dict[this_uuid]).unsqueeze(dim=0)
+        this_tts_speech = self.token2wav(
+            token=this_tts_speech_token,
+            prompt_token=flow_prompt_speech_token,
+            prompt_feat=prompt_speech_feat,
+            embedding=flow_embedding,
+            uuid=this_uuid,
+            finalize=True,
+            speed=speed)
+        yield {'tts_speech': this_tts_speech.cpu()}
         with self.lock:
             self.tts_speech_token_dict.pop(this_uuid)
             self.llm_end_dict.pop(this_uuid)
@@ -302,6 +222,4 @@ class CosyVoiceModel:
             model.load_jit('{}/llm.text_encoder.fp16.zip'.format(cfg.ckpt),
                            '{}/llm.llm.fp16.zip'.format(cfg.ckpt),
                            '{}/flow.encoder.fp32.zip'.format(cfg.ckpt))
-        if cfg.get("load_onnx", False):
-            model.load_onnx('{}/flow.decoder.estimator.fp32.onnx'.format(cfg.ckpt))
         return model
