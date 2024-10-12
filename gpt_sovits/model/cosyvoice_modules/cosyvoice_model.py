@@ -15,6 +15,7 @@ import torch
 import numpy as np
 import threading
 from torch.nn import functional as F
+import torch.nn as nn
 from contextlib import nullcontext
 import uuid
 from .utils.common import fade_in_out
@@ -22,7 +23,7 @@ from gpt_sovits.common.registry import registry
 
 
 @registry.register_model("cosyvoice_model")
-class CosyVoiceModel:
+class CosyVoiceModel(nn.Module):
 
     def __init__(
             self,
@@ -30,7 +31,7 @@ class CosyVoiceModel:
             flow: torch.nn.Module,
             hift: torch.nn.Module
     ):
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        super().__init__()
         self.llm = llm
         self.flow = flow
         self.hift = hift
@@ -56,6 +57,10 @@ class CosyVoiceModel:
         self.llm_end_dict = {}
         self.mel_overlap_dict = {}
         self.hift_cache_dict = {}
+
+    @property
+    def device(self):
+        return list(self.parameters())[0].device
 
     def load(self, llm_model, flow_model, hift_model):
         self.llm.load_state_dict(torch.load(llm_model, map_location=self.device))
