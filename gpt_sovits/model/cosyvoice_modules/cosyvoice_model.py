@@ -12,13 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import torch
-import numpy as np
-import threading
 from torch.nn import functional as F
 import torch.nn as nn
-from contextlib import nullcontext
-import uuid
-from .utils.common import fade_in_out
 from gpt_sovits.common.registry import registry
 
 
@@ -35,28 +30,6 @@ class CosyVoiceModel(nn.Module):
         self.llm = llm
         self.flow = flow
         self.hift = hift
-        self.token_min_hop_len = 2 * self.flow.input_frame_rate
-        self.token_max_hop_len = 4 * self.flow.input_frame_rate
-        self.token_overlap_len = 20
-        # mel fade in out
-        self.mel_overlap_len = int(self.token_overlap_len / self.flow.input_frame_rate * 22050 / 256)
-        self.mel_window = np.hamming(2 * self.mel_overlap_len)
-        # hift cache
-        self.mel_cache_len = 20
-        self.source_cache_len = int(self.mel_cache_len * 256)
-        # speech fade in out
-        self.speech_window = np.hamming(2 * self.source_cache_len)
-        # rtf and decoding related
-        self.stream_scale_factor = 1
-        assert self.stream_scale_factor >= 1, 'stream_scale_factor should be greater than 1, change it according to your actual rtf'
-        self.llm_context = torch.cuda.stream(
-            torch.cuda.Stream(self.device)) if torch.cuda.is_available() else nullcontext()
-        self.lock = threading.Lock()
-        # dict used to store session related variable
-        self.tts_speech_token_dict = {}
-        self.llm_end_dict = {}
-        self.mel_overlap_dict = {}
-        self.hift_cache_dict = {}
 
     @property
     def device(self):
@@ -79,22 +52,29 @@ class CosyVoiceModel(nn.Module):
         flow_encoder = torch.jit.load(flow_encoder_model, map_location=self.device)
         self.flow.encoder = flow_encoder
 
-    def llm_job(self, text, prompt_text, llm_prompt_speech_token, llm_embedding, uuid):
-        with self.llm_context:
-            for i in self.llm.inference(
-                    text=text.to(self.device),
-                    text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
-                    prompt_text=prompt_text.to(self.device),
-                    prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(
-                        self.device),
-                    prompt_speech_token=llm_prompt_speech_token.to(self.device),
-                    prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]],
-                                                         dtype=torch.int32).to(self.device),
-                    embedding=llm_embedding.to(self.device).half()):
-                self.tts_speech_token_dict[uuid].append(i)
-        self.llm_end_dict[uuid] = True
+    def llm_job(self, text, prompt_text, llm_prompt_speech_token, llm_embedding):
+        result = []
+        for i in self.llm.inference(
+                text=text.to(self.device),
+                text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
+                prompt_text=prompt_text.to(self.device),
+                prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(
+                    self.device),
+                prompt_speech_token=llm_prompt_speech_token.to(self.device),
+                prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]],
+                                                     dtype=torch.int32).to(self.device),
+                embedding=llm_embedding.to(self.device).half()):
+            result.append(i)
+        return torch.tensor(result)
 
-    def token2wav(self, token, prompt_token, prompt_feat, embedding, uuid, finalize=False, speed=1.0):
+    def token2wav(
+            self,
+            token,
+            prompt_token,
+            prompt_feat,
+            embedding,
+            speed=1.0
+    ):
         tts_mel = self.flow.inference(
             token=token.to(self.device),
             token_len=torch.tensor([token.shape[1]], dtype=torch.int32).to(self.device),
@@ -105,89 +85,58 @@ class CosyVoiceModel(nn.Module):
             prompt_feat_len=torch.tensor([prompt_feat.shape[1]], dtype=torch.int32).to(
                 self.device),
             embedding=embedding.to(self.device))
-        # mel overlap fade in out
-        if self.mel_overlap_dict[uuid] is not None:
-            tts_mel = fade_in_out(tts_mel, self.mel_overlap_dict[uuid], self.mel_window)
-        # append hift cache
-        if self.hift_cache_dict[uuid] is not None:
-            hift_cache_mel, hift_cache_source = self.hift_cache_dict[uuid]['mel'], self.hift_cache_dict[uuid]['source']
-            tts_mel = torch.concat([hift_cache_mel, tts_mel], dim=2)
-        else:
-            hift_cache_source = torch.zeros(1, 1, 0)
-        # keep overlap mel and hift cache
-        if finalize is False:
-            self.mel_overlap_dict[uuid] = tts_mel[:, :, -self.mel_overlap_len:]
-            tts_mel = tts_mel[:, :, :-self.mel_overlap_len]
-            tts_speech, tts_source = self.hift.inference(mel=tts_mel, cache_source=hift_cache_source)
-            if self.hift_cache_dict[uuid] is not None:
-                tts_speech = fade_in_out(tts_speech, self.hift_cache_dict[uuid]['speech'], self.speech_window)
-            self.hift_cache_dict[uuid] = {'mel': tts_mel[:, :, -self.mel_cache_len:],
-                                          'source': tts_source[:, :, -self.source_cache_len:],
-                                          'speech': tts_speech[:, -self.source_cache_len:]}
-            tts_speech = tts_speech[:, :-self.source_cache_len]
-        else:
-            if speed != 1.0:
-                assert self.hift_cache_dict[uuid] is None, 'speed change only support non-stream inference mode'
-                tts_mel = F.interpolate(tts_mel, size=int(tts_mel.shape[2] / speed), mode='linear')
-            tts_speech, tts_source = self.hift.inference(mel=tts_mel, cache_source=hift_cache_source)
-            if self.hift_cache_dict[uuid] is not None:
-                tts_speech = fade_in_out(tts_speech, self.hift_cache_dict[uuid]['speech'], self.speech_window)
+
+        hift_cache_source = torch.zeros(1, 1, 0)
+        if speed != 1.0:
+            tts_mel = F.interpolate(tts_mel, size=int(tts_mel.shape[2] / speed), mode='linear')
+        tts_speech, tts_source = self.hift.inference(mel=tts_mel, cache_source=hift_cache_source)
         return tts_speech
 
-    def tts(self, text, flow_embedding, llm_embedding=torch.zeros(0, 192),
+    def tts(
+            self,
+            text,
+            flow_embedding,
+            llm_embedding=torch.zeros(0, 192),
             prompt_text=torch.zeros(1, 0, dtype=torch.int32),
             llm_prompt_speech_token=torch.zeros(1, 0, dtype=torch.int32),
             flow_prompt_speech_token=torch.zeros(1, 0, dtype=torch.int32),
-            prompt_speech_feat=torch.zeros(1, 0, 80), speed=1.0, **kwargs):
-        # this_uuid is used to track variables related to this inference thread
-        this_uuid = str(uuid.uuid1())
-        with self.lock:
-            self.tts_speech_token_dict[this_uuid], self.llm_end_dict[this_uuid] = [], False
-            self.mel_overlap_dict[this_uuid], self.hift_cache_dict[this_uuid] = None, None
-        p = threading.Thread(target=self.llm_job,
-                             args=(text, prompt_text, llm_prompt_speech_token, llm_embedding, this_uuid))
-        p.start()
-        p.join()
-        this_tts_speech_token = torch.tensor(self.tts_speech_token_dict[this_uuid]).unsqueeze(dim=0)
+            prompt_speech_feat=torch.zeros(1, 0, 80),
+            speed=1.0,
+            **kwargs
+    ):
+
+        tts_speech_token = self.llm_job(
+            text, prompt_text, llm_prompt_speech_token, llm_embedding
+        )
+        this_tts_speech_token = tts_speech_token.unsqueeze(dim=0)
         this_tts_speech = self.token2wav(
             token=this_tts_speech_token,
             prompt_token=flow_prompt_speech_token,
             prompt_feat=prompt_speech_feat,
             embedding=flow_embedding,
-            uuid=this_uuid,
-            finalize=True,
-            speed=speed)
-        yield {'tts_speech': this_tts_speech.cpu()}
-        with self.lock:
-            self.tts_speech_token_dict.pop(this_uuid)
-            self.llm_end_dict.pop(this_uuid)
-            self.mel_overlap_dict.pop(this_uuid)
-            self.hift_cache_dict.pop(this_uuid)
+            speed=speed
+        )
+        return this_tts_speech
 
-    def vc(self, source_speech_token, flow_prompt_speech_token, prompt_speech_feat, flow_embedding,
-           speed=1.0, **kwargs):
-        # this_uuid is used to track variables related to this inference thread
-        this_uuid = str(uuid.uuid1())
-        with self.lock:
-            self.tts_speech_token_dict[this_uuid], self.llm_end_dict[
-                this_uuid] = source_speech_token.flatten().tolist(), True
-            self.mel_overlap_dict[this_uuid], self.hift_cache_dict[this_uuid] = None, None
+    def vc(
+            self,
+            source_speech_token,
+            flow_prompt_speech_token,
+            prompt_speech_feat,
+            flow_embedding,
+            speed=1.0,
+            **kwargs
+    ):
 
-        this_tts_speech_token = torch.tensor(self.tts_speech_token_dict[this_uuid]).unsqueeze(dim=0)
+        tts_speech_token = torch.tensor(source_speech_token.flatten().tolist())
+        this_tts_speech_token = torch.tensor(tts_speech_token).unsqueeze(dim=0)
         this_tts_speech = self.token2wav(
             token=this_tts_speech_token,
             prompt_token=flow_prompt_speech_token,
             prompt_feat=prompt_speech_feat,
             embedding=flow_embedding,
-            uuid=this_uuid,
-            finalize=True,
             speed=speed)
-        yield {'tts_speech': this_tts_speech.cpu()}
-        with self.lock:
-            self.tts_speech_token_dict.pop(this_uuid)
-            self.llm_end_dict.pop(this_uuid)
-            self.mel_overlap_dict.pop(this_uuid)
-            self.hift_cache_dict.pop(this_uuid)
+        return this_tts_speech.cpu()
 
     @classmethod
     def build_from_cfg(cls, cfg):
