@@ -24,3 +24,4 @@ torchaudio
 gradio==3.50.2
 conformer==0.3.2
 diffusers==0.25.0
+openai-whisper
