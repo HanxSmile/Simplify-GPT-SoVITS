@@ -166,7 +166,7 @@ class TransformerLM(torch.nn.Module):
             sampling: int = 25,
             max_token_text_ratio: float = 20,
             min_token_text_ratio: float = 2,
-    ) -> Generator[torch.Tensor, None, None]:
+    ) -> List:
         device = text.device
         text = torch.concat([prompt_text, text], dim=1)
         text_len += prompt_text_len
@@ -213,10 +213,11 @@ class TransformerLM(torch.nn.Module):
             if top_ids == self.speech_token_size:
                 break
             # in stream mode, yield token one by one
-            yield top_ids
+            # yield top_ids
             out_tokens.append(top_ids)
             offset += lm_input.size(1)
             lm_input = self.speech_embedding.weight[top_ids].reshape(1, 1, -1)
+        return out_tokens
 
     def sampling(self, weighted_scores, decoded_tokens, sampling, top_p=0.8, top_k=25, win_size=10, tau_r=0.1):
         top_ids = nucleus_sampling(weighted_scores, top_p=top_p, top_k=top_k)

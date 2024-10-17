@@ -53,18 +53,16 @@ class CosyVoiceModel(nn.Module):
         self.flow.encoder = flow_encoder
 
     def llm_job(self, text, prompt_text, llm_prompt_speech_token, llm_embedding):
-        result = []
-        for i in self.llm.inference(
-                text=text.to(self.device),
-                text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
-                prompt_text=prompt_text.to(self.device),
-                prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(
-                    self.device),
-                prompt_speech_token=llm_prompt_speech_token.to(self.device),
-                prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]],
-                                                     dtype=torch.int32).to(self.device),
-                embedding=llm_embedding.to(self.device).half()):
-            result.append(i)
+        result = self.llm.inference(
+            text=text.to(self.device),
+            text_len=torch.tensor([text.shape[1]], dtype=torch.int32).to(self.device),
+            prompt_text=prompt_text.to(self.device),
+            prompt_text_len=torch.tensor([prompt_text.shape[1]], dtype=torch.int32).to(
+                self.device),
+            prompt_speech_token=llm_prompt_speech_token.to(self.device),
+            prompt_speech_token_len=torch.tensor([llm_prompt_speech_token.shape[1]],
+                                                 dtype=torch.int32).to(self.device),
+            embedding=llm_embedding.to(self.device).half())
         return torch.tensor(result)
 
     def token2wav(
