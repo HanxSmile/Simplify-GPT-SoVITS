@@ -33,7 +33,7 @@ class CosyVoiceBase(nn.Module):
     ):
         super(CosyVoiceBase, self).__init__()
         self.is_instruct = is_instruct
-        self.cosyvoice_model = cosyvoice_model
+        self.cosyvoice_model = cosyvoice_model.eval()
         self.tokenizer = tokenizer
         self.allowed_special = allowed_special
         self.speech_tokenizer_session = speech_tokenizer_session
