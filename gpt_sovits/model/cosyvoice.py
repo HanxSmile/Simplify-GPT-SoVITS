@@ -156,7 +156,7 @@ class CosyVoiceBase(nn.Module):
 
         for sub_text in text_lst:
             y = self.inference(sub_text, speed=speed)
-            results.append(y.squeeze(0).cpu().float())
+            results.append(y.squeeze(0).float())
 
         return self.audio_postprocess(
             results,
@@ -371,7 +371,7 @@ class CosyVoiceVC(CosyVoiceBase):
         if not self.prompt_registered:
             self.register_prompt(inputs)
 
-        result = self.inference(speech_16k, speed=speed).squeeze(0).cpu().float()
+        result = self.inference(speech_16k, speed=speed).squeeze(0).float()
 
         return self.audio_postprocess(
             [result],

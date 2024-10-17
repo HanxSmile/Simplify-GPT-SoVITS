@@ -31,6 +31,7 @@ cosyvoice_model:
   llm_output_size: 1024
   spk_embed_dim: 192
   llm:
+    model_cls: transformer_llm
     text_encoder_input_size: Null
     llm_input_size: Null
     llm_output_size: Null
@@ -71,6 +72,7 @@ cosyvoice_model:
       selfattention_layer_type: 'rel_selfattn'
       static_chunk_size: 1
   flow:
+    model_cls: masked_diff_with_xvec
     input_size: 512
     output_size: 80
     spk_embed_dim: Null
@@ -118,6 +120,7 @@ cosyvoice_model:
         num_heads: 8
         act_fn: 'gelu'
   hift:
+    model_cls: hift_generator
     in_channels: 80
     base_channels: 512
     nb_harmonics: 8
