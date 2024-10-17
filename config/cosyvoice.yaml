@@ -1,0 +1,142 @@
+model_cls: cosyvoice_zero_shot
+cut_method: cut6
+ckpt: FunAudioLLM/CosyVoice-300M
+
+text_converter:
+  converter_cls: chinese_fs_converter
+
+sampling_rate: 22050
+allow_special: all
+
+tokenizer:
+  multilingual: True
+  num_languages: 100
+  language: en
+  task: transcribe
+
+feature_extractor:
+  n_fft: 1024
+  num_mels: 80
+  hop_size: 256
+  win_size: 1024
+  fmin: 0
+  fmax: 8000
+  center: False
+
+
+
+cosyvoice_model:
+  text_encoder_input_size: 512
+  llm_input_size: 1024
+  llm_output_size: 1024
+  spk_embed_dim: 192
+  llm:
+    text_encoder_input_size: Null
+    llm_input_size: Null
+    llm_output_size: Null
+    text_token_size: 51866
+    speech_token_size: 4096
+    length_normalized_loss: True
+    lsm_weight: 0
+    spk_embed_dim: Null
+    text_encoder:
+      input_size: Null
+      output_size: 1024
+      attention_heads: 16
+      linear_units: 4096
+      num_blocks: 6
+      dropout_rate: 0.1
+      positional_dropout_rate: 0.1
+      attention_dropout_rate: 0.0
+      normalize_before: True
+      input_layer: 'linear'
+      pos_enc_layer_type: 'rel_pos_espnet'
+      selfattention_layer_type: 'rel_selfattn'
+      use_cnn_module: False
+      macaron_style: False
+      use_dynamic_chunk: False
+      use_dynamic_left_chunk: False
+      static_chunk_size: 1
+    llm:
+      input_size: Null
+      output_size: Null
+      attention_heads: 16
+      linear_units: 4096
+      num_blocks: 14
+      dropout_rate: 0.1
+      positional_dropout_rate: 0.1
+      attention_dropout_rate: 0.0
+      input_layer: 'linear_legacy'
+      pos_enc_layer_type: 'rel_pos_espnet'
+      selfattention_layer_type: 'rel_selfattn'
+      static_chunk_size: 1
+  flow:
+    input_size: 512
+    output_size: 80
+    spk_embed_dim: Null
+    output_type: 'mel'
+    vocab_size: 4096
+    input_frame_rate: 50
+    only_mask_loss: True
+    encoder:
+      output_size: 512
+      attention_heads: 8
+      linear_units: 2048
+      num_blocks: 6
+      dropout_rate: 0.1
+      positional_dropout_rate: 0.1
+      attention_dropout_rate: 0.1
+      normalize_before: True
+      input_layer: 'linear'
+      pos_enc_layer_type: 'rel_pos_espnet'
+      selfattention_layer_type: 'rel_selfattn'
+      input_size: 512
+      use_cnn_module: False
+      macaron_style: False
+    length_regulator:
+      channels: 80
+      sampling_ratios: [ 1, 1, 1, 1 ]
+    decoder:
+      in_channels: 240
+      n_spks: 1
+      spk_emb_dim: 80
+      cfm_params:
+        sigma_min: 1e-06
+        solver: 'euler'
+        t_scheduler: 'cosine'
+        training_cfg_rate: 0.2
+        inference_cfg_rate: 0.7
+        reg_loss_type: 'l1'
+      estimator:
+        in_channels: 320
+        out_channels: 80
+        channels: [ 256, 256 ]
+        dropout: 0.0
+        attention_head_dim: 64
+        n_blocks: 4
+        num_mid_blocks: 12
+        num_heads: 8
+        act_fn: 'gelu'
+  hift:
+    in_channels: 80
+    base_channels: 512
+    nb_harmonics: 8
+    sampling_rate: Null
+    nsf_alpha: 0.1
+    nsf_sigma: 0.003
+    nsf_voiced_threshold: 10
+    upsample_rates: [ 8, 8 ]
+    upsample_kernel_sizes: [ 16, 16 ]
+    istft_params:
+      n_fft: 16
+      hop_len: 4
+    resblock_kernel_sizes: [ 3, 7, 11 ]
+    resblock_dilation_sizes: [ [ 1, 3, 5 ], [ 1, 3, 5 ], [ 1, 3, 5 ] ]
+    source_resblock_kernel_sizes: [ 7, 11 ]
+    source_resblock_dilation_sizes: [ [ 1, 3, 5 ], [ 1, 3, 5 ] ]
+    lrelu_slope: 0.1
+    audio_limit: 0.99
+    f0_predictor:
+      num_class: 1
+      in_channels: 80
+      cond_channels: 512

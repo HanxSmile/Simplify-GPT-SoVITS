@@ -1,18 +1,23 @@
 import torch.nn as nn
 import torch
+import os
 import torchaudio
-import logging
+import onnxruntime
+import whisper
 import numpy as np
-from tqdm.auto import tqdm
 from typing import Tuple, List
+from functools import partial
 from gpt_sovits.text.TextProcessor import TextProcessor
 from gpt_sovits.common.registry import registry
 import torchaudio.compliance.kaldi as kaldi
+from gpt_sovits.model.cosyvoice_modules import CosyVoiceModel
 from whisper.tokenizer import get_tokenizer
-import whisper
+from .cosyvoice_modules.utils.audio import mel_spectrogram
 
 
 class CosyVoiceBase(nn.Module):
+    SAMPLE_RATE = 22050
+
     def __init__(
             self,
             is_instruct,
@@ -135,64 +140,91 @@ class CosyVoiceBase(nn.Module):
             self,
             inputs,
             fragment_interval=0.3,
+            speed=1.0,
             *args,
             **kwargs
     ):
 
-        text, audio_prompt, text_prompt = inputs["text"], inputs["audio_prompt"], inputs["text_prompt"]
+        text = inputs["text"]
 
         if not self.prompt_registered:
             self.register_prompt(inputs)
 
-        audio_prompt = self.prompt_buffer["audio_prompt"]
         text_lst = self.text_processor.segment_text(text)
         text_lst = [self.text_processor.normalize_text(_) for _ in text_lst]
         results = []
 
         for sub_text in text_lst:
-            encoded = self.text2semantic_model.encode_tokens(sub_text)
-            model_inputs = torch.cat([audio_prompt, encoded], dim=1)
-            y = self.text2semantic_model.generate(
-                model_inputs,
-                max_new_tokens=max_new_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty
-            )
-            codes = y[1:, model_inputs.size(1):-1].clone()
-            codes = codes - 1
-            assert (codes >= 0).all(), f"Negative code found"
-            code_length = torch.tensor([codes.shape[1]], device=self.device)
-            fake_audio, _ = self.vqgan_model.decode(
-                indices=codes[None], feature_lengths=code_length
-            )
-            results.append(fake_audio[0, 0].float())
+            y = self.inference(sub_text, speed=speed)
+            results.append(y.squeeze(0).cpu().float())
 
         return self.audio_postprocess(
             results,
-            self.vqgan_model.spec_transform.sample_rate,
+            self.SAMPLE_RATE,
             fragment_interval
         )
 
     @classmethod
     def build_from_cfg(cls, cfg):
+        is_instruct = "-Instruct" in cfg.ckpt
+        sampling_rate = cfg.sampling_rate
+        tokenizer = get_tokenizer(
+            multilingual=cfg.tokenizer.multilingual,
+            num_languages=cfg.tokenizer.num_languages,
+            language=cfg.tokenizer.language,
+            task=cfg.tokenizer.task
+        )
+        allow_special = cfg.allow_special
+        feature_extractor = partial(
+            mel_spectrogram,
+            n_fft=cfg.feature_extractor.n_fft,
+            num_mels=cfg.feature_extractor.num_mels,
+            sampling_rate=sampling_rate,
+            hop_size=cfg.feature_extractor.hop_size,
+            win_size=cfg.feature_extractor.win_size,
+            fmin=cfg.feature_extractor.fmin,
+            fmax=cfg.feature_extractor.fmax,
+            center=cfg.feature_extractor.center,
+        )
 
-        vqgan_cfg = cfg.vqgan
-        text2semantic_cfg = cfg.text2semantic
-
-        vqgan_cls = registry.get_model_class(vqgan_cfg.model_cls)
-        vqgan_model = vqgan_cls.build_from_cfg(vqgan_cfg)
-
-        text2semantic_cls = registry.get_model_class(text2semantic_cfg.model_cls)
-        text2semantic_model = text2semantic_cls.build_from_cfg(text2semantic_cfg)
+        option = onnxruntime.SessionOptions()
+        option.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
+        option.intra_op_num_threads = 1
+        campplus_model = os.path.join(cfg.ckpt, "campplus.onnx")
+        campplus_session = onnxruntime.InferenceSession(
+            campplus_model,
+            sess_options=option,
+            providers=["CPUExecutionProvider"])
+        speech_tokenizer_model = os.path.join(cfg.ckpt, "speech_tokenizer_v1.onnx")
+        speech_tokenizer_session = onnxruntime.InferenceSession(
+            speech_tokenizer_model,
+            sess_options=option,
+            providers=[
+                "CUDAExecutionProvider" if torch.cuda.is_available() else
+                "CPUExecutionProvider"])
+        spk2info = os.path.join(cfg.ckpt, "spk2info.pt")
+        if os.path.exists(spk2info):
+            spk2info = torch.load(spk2info, map_location=torch.device("cpu"))
+        else:
+            spk2info = {}
+        cfg.cosyvoice_model.sampling_rate = sampling_rate
+        cfg.cosyvoice_model.ckpt = cfg.ckpt
+        cosyvoice_model = CosyVoiceModel.build_from_cfg(cfg.cosyvoice_model)
 
         cut_method = cfg.get("cut_method", "cut5")
         text_converter_cfg = cfg.text_converter
+
         return cls(
-            vqgan_model=vqgan_model,
-            text2semantic_model=text2semantic_model,
+            is_instruct=is_instruct,
+            cosyvoice_model=cosyvoice_model,
+            tokenizer=tokenizer,
+            allowed_special=allow_special,
+            speech_tokenizer_session=speech_tokenizer_session,
+            feat_extractor=feature_extractor,
+            campplus_session=campplus_session,
             text_converter_cfg=text_converter_cfg,
             cut_method=cut_method,
+            spk2info=spk2info,
         )
 
 
@@ -295,23 +327,54 @@ class CosyVoiceInstruct(CosyVoiceBase):
 @registry.register_model("cosyvoice_vc")
 class CosyVoiceVC(CosyVoiceBase):
 
-    def frontend_vc(self, source_speech_16k, prompt_speech_16k):
+    def frontend_vc(self, inputs):
+        prompt_audio_path = inputs["prompt_audio"]
+        audio, sr = torchaudio.load(str(prompt_audio_path))
+        if audio.shape[0] > 1:
+            audio = audio.mean(0, keepdim=True)
+        prompt_speech_16k = torchaudio.functional.resample(
+            audio, sr, 16_000
+        )
         prompt_speech_token, prompt_speech_token_len = self._extract_speech_token(prompt_speech_16k)
         prompt_speech_22050 = torchaudio.transforms.Resample(orig_freq=16000, new_freq=22050)(prompt_speech_16k)
         prompt_speech_feat, prompt_speech_feat_len = self._extract_speech_feat(prompt_speech_22050)
         embedding = self._extract_spk_embedding(prompt_speech_16k)
-        source_speech_token, source_speech_token_len = self._extract_speech_token(source_speech_16k)
+
         model_input = {
-            'source_speech_token': source_speech_token,
-            'source_speech_token_len': source_speech_token_len,
             'flow_prompt_speech_token': prompt_speech_token,
             'flow_prompt_speech_token_len': prompt_speech_token_len,
             'prompt_speech_feat': prompt_speech_feat,
             'prompt_speech_feat_len': prompt_speech_feat_len,
             'flow_embedding': embedding
         }
-        return model_input
+        self.prompt_buffer.update(model_input)
+        self.prompt_registered = True
 
-    def inference_vc(self, source_speech_16k, prompt_speech_16k, speed=1.0):
-        model_input = self.frontend_vc(source_speech_16k, prompt_speech_16k)
-        return self.cosyvoice_model.vc(**model_input, speed=speed)
+    def inference(self, source_speech_16k, speed=1.0):
+        source_speech_token, source_speech_token_len = self._extract_speech_token(source_speech_16k)
+        model_inputs = {
+            'source_speech_token': source_speech_token,
+            'source_speech_token_len': source_speech_token_len,
+        }
+        model_inputs.update(self.prompt_buffer)
+        return self.cosyvoice_model.vc(**model_inputs, speed=speed)
+
+    def generate(self, inputs, speed=1.0, *args, **kwargs):
+        audio_path = inputs["audio"]
+        audio, sr = torchaudio.load(str(audio_path))
+        if audio.shape[0] > 1:
+            audio = audio.mean(0, keepdim=True)
+        speech_16k = torchaudio.functional.resample(
+            audio, sr, 16_000
+        )
+
+        if not self.prompt_registered:
+            self.register_prompt(inputs)
+
+        result = self.inference(speech_16k, speed=speed).squeeze(0).cpu().float()
+
+        return self.audio_postprocess(
+            [result],
+            self.SAMPLE_RATE,
+            0.1,
+        )
