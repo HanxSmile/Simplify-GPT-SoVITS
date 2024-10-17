@@ -139,7 +139,7 @@ class CosyVoiceBase(nn.Module):
     def generate(
             self,
             inputs,
-            fragment_interval=0.3,
+            fragment_interval=0.1,
             speed=1.0,
             *args,
             **kwargs
