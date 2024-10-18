@@ -19,7 +19,7 @@ def generate_audio(model, prompt_audio, prompt_text, text, ref_audio=None):
     model.register_prompt(inputs)
     sr, audio_data = model.generate(
         {"text": text},
-        fragment_interval=0.1
+        fragment_interval=0
     )
     try:
         os.remove(prompt_audio)

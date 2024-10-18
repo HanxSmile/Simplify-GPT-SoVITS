@@ -152,10 +152,11 @@ class CosyVoiceBase(nn.Module):
 
         text_lst = self.text_processor.segment_text(text)
         text_lst = [self.text_processor.normalize_text(_) for _ in text_lst]
+        print(text_lst)
         results = []
 
         for sub_text in text_lst:
-            y = self.inference(sub_text, speed=speed)
+            y = self.inference("。。" + sub_text, speed=speed)
             results.append(y.squeeze(0).float())
 
         return self.audio_postprocess(

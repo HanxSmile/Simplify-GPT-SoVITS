@@ -1,5 +1,4 @@
 from gpt_sovits.text.chinese import TextNormalizer
-from gpt_sovits.text.chinese.tone_sandhi import ToneSandhi
 from gpt_sovits.text.base_converter import BaseConverter
 import re
 from gpt_sovits.common.registry import registry
@@ -9,21 +8,23 @@ from gpt_sovits.text.chinese.chn_text_norm.text import Text
 @registry.register_converter("chinese_fs_converter")
 class Converter(BaseConverter):
     REP_MAP = {
-        "：": ",",
-        "；": ",",
-        "，": ",",
-        "。": ".",
-        "！": "!",
-        "？": "?",
-        "\n": ".",
-        "·": ",",
-        "、": ",",
-        "...": "…",
-        "$": ".",
-        "/": ",",
+        "：": "，",
+        ":": "，",
+        ";": "，",
+        "；": "，",
+        ",": "，",
+        ".": "。",
+        "!": "！",
+        "?": "？",
+        "\n": "。",
+        "·": "，",
+        "、": "，",
+        "...": "。",
+        "$": "。",
+        "/": "，",
         "—": "-",
-        "~": "…",
-        "～": "…",
+        "~": "。",
+        "～": "。",
         '"': '',
         "'": '',
         '“': '',
@@ -31,6 +32,7 @@ class Converter(BaseConverter):
         '「': '',
         '」': '',
     }
+    PUNCTUATIONS = ["!", "?", "…", ",", ".", "。", "，", "！", "？"]  # @是SP停顿
 
     LANG = "zh"
 
@@ -38,7 +40,6 @@ class Converter(BaseConverter):
             self,
     ):
         self.normalizer = TextNormalizer()
-        self.tone_modifier = ToneSandhi()
 
     def normalize(self, text):
         if re.search(r'[A-Za-z]', text):
